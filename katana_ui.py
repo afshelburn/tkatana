@@ -149,7 +149,7 @@ class EffectPanel:
         self.green_button.grid(row=0, column=0)
         self.red_button.grid(row=0, column=1)
         self.orange_button.grid(row=0, column=2)
-        scale = Scale(self.panel_frame, variable=self.level, orient="horizontal", from_=0, to=127, length=scale_length)
+        scale = Scale(self.panel_frame, variable=self.level, orient="horizontal", from_=0, to=100, length=scale_length)
         scale.grid(row=1, column=0, columnspan=3, sticky=W+E)
         button = Checkbutton(self.panel_frame, image=off_image, selectimage=on_image, indicatoron=False, onvalue=1, offvalue=0, variable=self.toggle)
         button.grid(row=2, column=0, sticky=N+W+S+E, columnspan=3)
