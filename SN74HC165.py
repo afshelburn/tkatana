@@ -66,7 +66,7 @@ class PISO(threading.Thread):
    SPI_FLAGS_AUX=256   # use auxiliary SPI device
    SPI_FLAGS_NO_CE0=32 # don't use CE0
 
-   def __init__(self, pi, SH_LD, SPI_device=MAIN_SPI,
+   def __init__(self, pi, SH_LD, OUTPUT_LATCH, SPI_device=MAIN_SPI,
       chips=1, reads_per_second=100, callback=None):
       """
       Instantiate with the connection to the Pi.
@@ -94,7 +94,7 @@ class PISO(threading.Thread):
       self.set_reads_per_second(reads_per_second)
 
       self._pi = pi
-
+      
       assert 0 <= SH_LD <= 53
       self._SH_LD = SH_LD
 
@@ -103,6 +103,10 @@ class PISO(threading.Thread):
       if SPI_device == AUX_SPI:
          flags |= self.SPI_FLAGS_AUX
       self._h = pi.spi_open(0, 5000000, flags)
+
+      self._OUTPUT_LATCH = OUTPUT_LATCH
+
+      self._pi.set_mode(self._OUTPUT_LATCH, pigpio.OUTPUT)
 
       assert 1 <= chips
       self._chips = chips
@@ -133,6 +137,7 @@ class PISO(threading.Thread):
          if self._exiting:
             return data
          self._pi.gpio_trigger(self._SH_LD, 1, 0)
+         self._pi.write(self._OUTPUT_LATCH, 0)
          read_time = time.time()
          count, data = self._pi.spi_xfer(self._h, self._outputs)##[0xFF])##self._chips)
          #print(str(count))
@@ -150,6 +155,7 @@ class PISO(threading.Thread):
                                           read_time)
             self._last_data = data
             self._outputs = data
+      self._pi.write(self._OUTPUT_LATCH, 1)
       return data
 
    def set_callback(self, callback):
@@ -214,7 +220,7 @@ if __name__ == "__main__":
    run_for = 300
 
    sr = SN74HC165.PISO(
-           pi, SH_LD=16,
+           pi, SH_LD=16, OUTPUT_LATCH=
            SPI_device=SN74HC165.AUX_SPI, chips=2,
            reads_per_second=6, callback=cbf)
 
