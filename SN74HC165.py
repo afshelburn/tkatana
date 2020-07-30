@@ -99,14 +99,17 @@ class PISO(threading.Thread):
       self._SH_LD = SH_LD
 
       assert 0 <= SPI_device <= 1
-      flags = 0#self.SPI_FLAGS_NO_CE0
+      flags = self.SPI_FLAGS_NO_CE0
       if SPI_device == AUX_SPI:
          flags |= self.SPI_FLAGS_AUX
-      self._h = pi.spi_open(0, 5000000, flags)
+      self._h = pi.spi_open(0, 5000000, flags)#was 5000000
+
+      #self._h.max_speed_hz = 500000
 
       self._OUTPUT_LATCH = OUTPUT_LATCH
 
       self._pi.set_mode(self._OUTPUT_LATCH, pigpio.OUTPUT)
+      self._pi.write(self._OUTPUT_LATCH, 1)
 
       assert 1 <= chips
       self._chips = chips
@@ -121,7 +124,7 @@ class PISO(threading.Thread):
 
       self.start()
 
-      self._outputs = [0xFF,0xFF]
+      #self._outputs = [0xFF,0xFF]
 
    def read(self):
       """
@@ -139,7 +142,8 @@ class PISO(threading.Thread):
          self._pi.gpio_trigger(self._SH_LD, 1, 0)
          self._pi.write(self._OUTPUT_LATCH, 0)
          read_time = time.time()
-         count, data = self._pi.spi_xfer(self._h, self._outputs)##[0xFF])##self._chips)
+         
+         count, data = self._pi.spi_xfer(self._h, self._last_data)#_outputs)##[0xFF])##self._chips)
          #print(str(count))
          #print(str(data))
          if data != self._last_data:
@@ -154,8 +158,8 @@ class PISO(threading.Thread):
                                           (data[i]>>j)&1,
                                           read_time)
             self._last_data = data
-            self._outputs = data
-      self._pi.write(self._OUTPUT_LATCH, 1)
+            #self._outputs[0] = data[0]#[0xFF,0xFF]#data
+         self._pi.write(self._OUTPUT_LATCH, 1)
       return data
 
    def set_callback(self, callback):
@@ -220,9 +224,9 @@ if __name__ == "__main__":
    run_for = 300
 
    sr = SN74HC165.PISO(
-           pi, SH_LD=16, OUTPUT_LATCH=
+           pi, SH_LD=16, OUTPUT_LATCH=26,
            SPI_device=SN74HC165.AUX_SPI, chips=2,
-           reads_per_second=6, callback=cbf)
+           reads_per_second=60, callback=cbf)
 
    time.sleep(run_for)
 
@@ -233,5 +237,4 @@ if __name__ == "__main__":
       print(r[i])
 
    sr.cancel()
-
    pi.stop()
