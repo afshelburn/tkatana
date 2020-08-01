@@ -7,6 +7,18 @@ import pigpio
 MAIN_SPI=0
 AUX_SPI=1
 
+RBUTTON_MAP = {0:9,1:8,2:10,3:12,4:15,5:13,6:14,7:5,8:6,9:7,10:4,11:0,12:1,13:3,14:2}
+
+#pin 9 maps to button 0
+BUTTON_MAP = {9:0,8:1,10:2,12:3,15:4,13:5,14:6,5:7,6:8,7:9,4:10,0:11,1:12,3:13,2:14}
+
+# button 7 maps to led pin 0
+LED_MAP = {7:0,6:1,5:2,14:3,13:4,12:5,11:6,10:7,0:13,4:8,3:9,2:10,1:11,0:13,8:15,9:14}
+#0,1,2,3,4,5,6,7,8,9,10,11,x12x,13,14,15
+LED_STATE = [0x00,0x00]
+
+BUTTON_STATE = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+
 class PISO(threading.Thread):
    """
    A class to read multiple inputs from one or more
@@ -66,7 +78,7 @@ class PISO(threading.Thread):
    SPI_FLAGS_AUX=256   # use auxiliary SPI device
    SPI_FLAGS_NO_CE0=32 # don't use CE0
 
-   def __init__(self, pi, SH_LD, OUTPUT_LATCH, SPI_device=MAIN_SPI,
+   def __init__(self, pi, SH_LD, OUTPUT_LATCH, SPI_device=AUX_SPI,
       chips=1, reads_per_second=100, callback=None):
       """
       Instantiate with the connection to the Pi.
@@ -118,6 +130,8 @@ class PISO(threading.Thread):
 
       self._last_data = [0]*chips
 
+      self._data_out = [0]*chips
+      
       self._exiting = False
 
       self.daemon = True
@@ -143,7 +157,8 @@ class PISO(threading.Thread):
          self._pi.write(self._OUTPUT_LATCH, 0)
          read_time = time.time()
          
-         count, data = self._pi.spi_xfer(self._h, self._last_data)#_outputs)##[0xFF])##self._chips)
+         count, data = self._pi.spi_xfer(self._h, self._data_out)#_outputs)##[0xFF])##self._chips)
+         
          #print(str(count))
          #print(str(data))
          if data != self._last_data:
@@ -152,15 +167,16 @@ class PISO(threading.Thread):
                for i in range(self._chips):
                   if data[i] != self._last_data[i]:
                      for j in range(8):
-                        if ((data[i] & (1<<j)) !=
-                            (self._last_data[i] & (1<<j))):
-                           self._callback((i*8)+j,
-                                          (data[i]>>j)&1,
-                                          read_time)
+                        if ((data[i] & (1<<j)) != (self._last_data[i] & (1<<j))):
+                           self._data_out = self._callback((i*8)+j, (data[i]>>j)&1, read_time)
+            
             self._last_data = data
             #self._outputs[0] = data[0]#[0xFF,0xFF]#data
          self._pi.write(self._OUTPUT_LATCH, 1)
       return data
+    
+   def set_data(d):
+       self._data_out = d.copy()
 
    def set_callback(self, callback):
       """
@@ -213,9 +229,32 @@ if __name__ == "__main__":
    import time
    import SN74HC165
    import pigpio
+   
+   def toggleBit(n, k):
+       return (n^(1<<(k-1)))
 
    def cbf(pin, level, tick):
       print(pin, level, tick)
+      btn = BUTTON_MAP[pin]
+      print("Button " + str(btn))
+      if BUTTON_STATE[btn] == 0:
+         BUTTON_STATE[btn] = 1
+      else:
+         BUTTON_STATE[btn] = 0
+         
+      val = BUTTON_STATE[btn]
+      led_pin = LED_MAP[btn]
+      print("LED PIN = " + str(led_pin))
+      
+      if led_pin > 7:
+         LED_STATE[1] = toggleBit(LED_STATE[1], led_pin - 7)
+      else:
+         LED_STATE[0] = toggleBit(LED_STATE[0], led_pin + 1)
+         
+      #LED_STATE[0] = 1
+      #LED_STATE[1] = 0
+         
+      return LED_STATE
 
    pi = pigpio.pi()
    if not pi.connected:
