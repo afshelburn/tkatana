@@ -6,6 +6,8 @@ import sys
 import katana
 from tkinter import *
 import tkinter.font as tkFont
+import pigpio
+import SN74HC165
 
 from itertools import cycle
 
@@ -501,6 +503,21 @@ frame = Frame(width=480, height=320)
 
 katanaUI = KatanaUI(frame)
 
+def cbf(pin, level, tick):
+    print(str(pin) + ": " + str(level))
+    val = katanaUI.boostPanel.toggle.get()
+    if val == 0:
+        val = 1
+    else:
+        val = 0
+    katanaUI.boostPanel.toggle.set(val)
+    
+    return [0xFF,0xFF]
+
+pi = pigpio.pi()
+   
+sr = SN74HC165.PISO(pi, SH_LD=16, OUTPUT_LATCH=26, chips=2, reads_per_second=60, callback=cbf)
+
 #frame.pack_propagate(0)
 
 frame.pack()
@@ -522,3 +539,6 @@ katanaUI.read()
 #katanaUI.set_patch_names(names)
 
 root.mainloop()
+
+sr.cancel()
+pi.stop()
