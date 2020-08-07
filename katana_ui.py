@@ -8,6 +8,7 @@ from tkinter import *
 import tkinter.font as tkFont
 import pigpio
 import SN74HC165
+import time
 
 from itertools import cycle
 
@@ -21,6 +22,24 @@ on_image = tk.PhotoImage(width=bw, height=bh)
 off_image = tk.PhotoImage(width=bw, height=bh)
 on_image.put(("magenta",), to=(0, 0, bw-1, bh-1))
 off_image.put(("gray",), to=(0, 0, bw-1, bh-1))
+
+BOOST_HW_BUTTON = 0
+MOD_HW_BUTTON = 1
+FX_HW_BUTTON = 2
+DELAY_HW_BUTTON = 3
+REVERB_HW_BUTTON = 4
+
+PANEL_HW_BUTTON = 5
+CH1_HW_BUTTON = 6
+CH2_HW_BUTTON = 7
+CH3_HW_BUTTON = 8
+CH4_HW_BUTTON = 9
+
+AMP_HW_BUTTON = 10
+MUTE_HW_BUTTON = 14
+AB_HW_BUTTON = 12
+TAP_HW_BUTTON = 13
+NEXT_HW_BUTTON = 11
 
 AMP_TYPE_ACOUSTIC = 0x01
 AMP_TYPE_ACOUSTIC_V = 0x1C
@@ -123,7 +142,7 @@ REVERB_OPTIONS = {0x00:"Ambience",0x01:"Room",0x02:"Hall 1",0x03:"Hall 2",0x04:"
 scale_length = 100
 
 class EffectPanel:
-    channel = tk.IntVar(name="Channel", value=1)
+    channel = tk.IntVar(name="Channel", value=5)
     #channel_callback = channel_cb
     def __init__(self, parent, title, chTitle, iChannel, feature, featureCallback, colorCallback, levelCallback, toggleCallback):#, channelCallback):
         
@@ -202,13 +221,13 @@ class KatanaUI:
         self.katana = katana.Katana('KATANA MIDI 1', 0, False)
         
         EffectPanel.channel.trace('w', self.channel_cb) 
-        self.channelOffset = 0
+        #self.channelOffset = 0
         #self.ampSelect = ListBox(tkRoot)
-        self.boostPanel = EffectPanel(tkRoot, "Boost", "Panel", 4, "Amp", self.amp_cb, self.boost_color_cb, self.boost_level_cb, self.boost_toggle_cb)#, self.channel_cb)
-        self.modPanel = EffectPanel(tkRoot,  "Mod", "Ch1/5", 0, "Mute", self.mute_cb, self.mod_color_cb, self.mod_level_cb, self.mod_toggle_cb)#, self.channel_cb)
-        self.fxPanel = EffectPanel(tkRoot,  "FX", "Ch2/6", 1, "A/B", self.ab_cb, self.fx_color_cb, self.fx_level_cb, self.fx_toggle_cb)#, self.channel_cb)
-        self.delayPanel = EffectPanel(tkRoot,  "Delay", "Ch3/7", 2, "Tap", self.tap_cb, self.delay_color_cb, self.delay_level_cb, self.delay_toggle_cb)#, self.channel_cb)
-        self.reverbPanel = EffectPanel(tkRoot,  "Reverb", "Ch4/8", 3, "Next", self.write_cb, self.reverb_color_cb, self.reverb_level_cb, self.reverb_toggle_cb)#, self.channel_cb)
+        self.boostPanel = EffectPanel(tkRoot, "Boost", "Panel", 0, "Amp", self.amp_cb, self.boost_color_cb, self.boost_level_cb, self.boost_toggle_cb)#, self.channel_cb)
+        self.modPanel = EffectPanel(tkRoot,  "Mod", "Ch1/5", 1, "Next", self.write_cb, self.mod_color_cb, self.mod_level_cb, self.mod_toggle_cb)#, self.channel_cb)
+        self.fxPanel = EffectPanel(tkRoot,  "FX", "Ch2/6", 2, "A/B", self.ab_cb, self.fx_color_cb, self.fx_level_cb, self.fx_toggle_cb)#, self.channel_cb)
+        self.delayPanel = EffectPanel(tkRoot,  "Delay", "Ch3/7", 3, "Tap", self.tap_cb, self.delay_color_cb, self.delay_level_cb, self.delay_toggle_cb)#, self.channel_cb)
+        self.reverbPanel = EffectPanel(tkRoot,  "Reverb", "Ch4/8", 4, "Mute", self.mute_cb, self.reverb_color_cb, self.reverb_level_cb, self.reverb_toggle_cb)#, self.channel_cb)
         self.amp_selection = 0
         self.mute = 0
         self.ab = 0
@@ -226,8 +245,62 @@ class KatanaUI:
 
         self.katana.busy = 0
 
-        
+        self.pi = pigpio.pi()
+   
+        self.sr = SN74HC165.PISO(self.pi, SH_LD=16, OUTPUT_LATCH=26, chips=2, reads_per_second=60, callback=self.hardware_button)
 
+    def hardware_button(self, btn, val, read_time):
+        print("Button: " + str(btn) + " = " + str(val))
+        if btn > 9 and btn != AB_HW_BUTTON:
+            self.sr.set_led(btn, val)
+        elif val > 0:
+            if btn == BOOST_HW_BUTTON:
+                val = self.boostPanel.toggle.get()
+                
+                if val == 0:
+                    val = 1
+                else:
+                    val = 0
+                print("HW BOOST BUTTON, setting value to " + str(val))
+                self.boostPanel.toggle.set(val)
+            elif btn == MOD_HW_BUTTON:
+                val = self.modPanel.toggle.get()
+                
+                if val == 0:
+                    val = 1
+                else:
+                    val = 0
+                print("HW MOD BUTTON, setting value to " + str(val))
+                self.modPanel.toggle.set(val)
+            elif btn == FX_HW_BUTTON:
+                val = self.fxPanel.toggle.get()
+                
+                if val == 0:
+                    val = 1
+                else:
+                    val = 0
+                print("HW FX BUTTON, setting value to " + str(val))
+                self.fxPanel.toggle.set(val)
+            elif btn == DELAY_HW_BUTTON:
+                val = self.delayPanel.toggle.get()
+                
+                if val == 0:
+                    val = 1
+                else:
+                    val = 0
+                print("HW DELAY BUTTON, setting value to " + str(val))
+                self.delayPanel.toggle.set(val)
+            elif btn == REVERB_HW_BUTTON:
+                val = self.reverbPanel.toggle.get()
+                
+                if val == 0:
+                    val = 1
+                else:
+                    val = 0
+                print("HW REVERB BUTTON, setting value to " + str(val))
+                self.reverbPanel.toggle.set(val)
+                
+        
     def read(self):
         print("Reading settings")
         self.katana.busy = 1
@@ -238,6 +311,41 @@ class KatanaUI:
             test = next(self.amp_pool)
         ampName = AMP_MAP[self.amp_selection]
         self.boostPanel.feature_frame.config(text="Amp: " + ampName)
+        
+        channel = self.katana.query_channel()
+        print("Current channel selection: " + str(channel))
+        if channel > 4:
+            self.ab = 1
+        else:
+            self.ab = 0
+            
+        #self.channelOffset = self.ab*4
+        self.set_patch_names(self.get_patch_names())
+        channel = self.katana.query_channel()
+        for i in range(5,10):
+            self.sr.set_led(i, 0)
+        if channel == 0:
+            self.sr.set_led(PANEL_HW_BUTTON, 1)
+        #if channel > 4 and self.ab == 1:
+        #    self.sr.set_led(channel - 4 + PANEL_HW_BUTTON, 1)
+        #time.sleep(1)
+        if channel < 5:# and self.ab == 0:
+            self.sr.set_led(channel + PANEL_HW_BUTTON, 1)
+            
+            
+        print("Channel = " + str(channel))
+        if channel < 5:
+            print("A/B = 0-")
+            print("Setting ab led to 0")
+            self.boostPanel.channel.set(channel)
+            self.sr.set_led(AB_HW_BUTTON, 0)
+            self.ab = 0
+        else:
+            self.boostPanel.channel.set(channel - 4)
+            print("Setting ab led to 1")
+            self.sr.set_led(AB_HW_BUTTON, 1)
+            print("A/B = 1-")
+            self.ab = 1
 
         boostColor = self.katana.query_boost_color()
         self.boostPanel.color.set(boostColor)
@@ -275,7 +383,7 @@ class KatanaUI:
         self.delayPanel.toggle.set(self.katana.query_delay_sw())
         self.reverbPanel.toggle.set(self.katana.query_reverb_sw())
 
-        self.set_patch_names(self.get_patch_names())
+        #self.set_patch_names(self.get_patch_names())
 
         self.color_assignments = self.katana.query_color_assignment()
         print("Boost Green Red Orange assigned to:")
@@ -294,14 +402,21 @@ class KatanaUI:
         for i in range(12,15):
             print("  " + REVERB_OPTIONS[self.color_assignments[i]])
 
+        
+        self.sr.set_led(BOOST_HW_BUTTON, self.boostPanel.toggle.get())
+        self.sr.set_led(MOD_HW_BUTTON, self.modPanel.toggle.get())
+        self.sr.set_led(FX_HW_BUTTON, self.fxPanel.toggle.get())
+        self.sr.set_led(DELAY_HW_BUTTON, self.delayPanel.toggle.get())
+        self.sr.set_led(REVERB_HW_BUTTON, self.reverbPanel.toggle.get())
+        
         self.katana.busy = 0
         
     def set_patch_names(self, names):
         self.boostPanel.channelLabel.config(text=names[0])
-        self.modPanel.channelLabel.config(text=names[1 + self.channelOffset])
-        self.fxPanel.channelLabel.config(text=names[2 + self.channelOffset])
-        self.delayPanel.channelLabel.config(text=names[3 + self.channelOffset])
-        self.reverbPanel.channelLabel.config(text=names[4 + self.channelOffset])
+        self.modPanel.channelLabel.config(text=names[1 + self.ab*4])
+        self.fxPanel.channelLabel.config(text=names[2 + self.ab*4])
+        self.delayPanel.channelLabel.config(text=names[3 + self.ab*4])
+        self.reverbPanel.channelLabel.config(text=names[4 + self.ab*4])
         
     def boost_level_cb(self, val):
         print("Boost level changed to " + str(val))
@@ -357,29 +472,39 @@ class KatanaUI:
     def boost_toggle_cb(self, val):
         print("Boost on/off changed to " + str(val))
         self.katana.set_boost_sw(val)
+        self.sr.set_led(BOOST_HW_BUTTON, val)
         
     def mod_toggle_cb(self, val):
         print("Mod on/off changed to " + str(val))
         self.katana.set_mod_sw(val)
+        self.sr.set_led(MOD_HW_BUTTON, val)
 
     def fx_toggle_cb(self, val):
         print("Effect on/off changed to " + str(val))
         self.katana.set_fx_sw(val)
+        self.sr.set_led(FX_HW_BUTTON, val)
 
     def delay_toggle_cb(self, val):
         print("Delay on/off changed to " + str(val))
         self.katana.set_delay_sw(val)
+        self.sr.set_led(DELAY_HW_BUTTON, val)
 
     def reverb_toggle_cb(self, val):
         print("Reverb on/off changed to " + str(val))
         self.katana.set_reverb_sw(val)
+        self.sr.set_led(REVERB_HW_BUTTON, val)
 
     def channel_cb(self, *val):
-        print("Channel changed to " + str(EffectPanel.channel.get() + self.channelOffset))
+        print("Channel changed to " + str(EffectPanel.channel.get() + self.ab*4))
+        chnmap = {0:4,1:0,2:1,3:2,4:3,5:5,6:6,7:7,8:8}
+        #if self.ab == 0:
+            
+        #else:
+            
+        ch = chnmap[EffectPanel.channel.get() + self.ab*4]
+        print("Mapped to " + str(ch))
         if self.katana.busy == 0:
-            ch = EffectPanel.channel.get() + self.channelOffset
-            if ch > 8:
-                ch = 4
+            #ch = chnmap[EffectPanel.channel.get() + self.channelOffset]
             self.katana.select_channel(ch)
             self.read()
         
@@ -403,17 +528,41 @@ class KatanaUI:
         
         
     def ab_cb(self):
+        #self.katana.busy = 1
+        #if True:
+        #    return
         if self.ab == 0:
             self.ab = 1
-            print("A/B: B")
+            print("A/B: B--")
             self.fxPanel.feature_frame.config(text="A/B: B")
+            self.sr.set_led(AB_HW_BUTTON, 1)
         else:
             self.ab = 0   
-            print("A/B: A")
+            print("A/B: A--")
             self.fxPanel.feature_frame.config(text="A/B: A")
-        self.channelOffset = self.ab*4
-        self.set_patch_names(self.get_patch_names())
+            self.sr.set_led(AB_HW_BUTTON, 0)
         
+        #self.channelOffset = self.ab*4
+        #self.set_patch_names(self.get_patch_names())
+        
+        #channel = self.katana.query_channel()
+        #print("On A/B Change, Channel = " + str(channel))
+        #for i in range(5,10):
+        #    self.sr.set_led(i, 0)
+        #if channel == 0:
+        #    self.sr.set_led(PANEL_HW_BUTTON, 1)
+        #    self.boostPanel.channel.set(channel)
+        #elif channel > 4 and self.ab == 1:
+        #    self.sr.set_led(channel - 4 + PANEL_HW_BUTTON, 1)
+        #    self.boostPanel.channel.set(channel-4)
+        #elif channel < 5 and self.ab == 0:
+        #    self.sr.set_led(channel + PANEL_HW_BUTTON, 1)
+        #    self.boostPanel.channel.set(channel)
+        #else:
+        #    
+        #    self.boostPanel.channel.set(-1)
+        ##self.katana.busy = 0
+        ##    
     def tap_cb(self):
         print("Tap")
         
@@ -504,6 +653,8 @@ frame = Frame(width=480, height=320)
 katanaUI = KatanaUI(frame)
 
 def cbf(pin, level, tick):
+    if level == 0:
+        return
     print(str(pin) + ": " + str(level))
     val = katanaUI.boostPanel.toggle.get()
     if val == 0:
@@ -511,18 +662,19 @@ def cbf(pin, level, tick):
     else:
         val = 0
     katanaUI.boostPanel.toggle.set(val)
+    katanaUI.sr.set_led(BOOST_HW_BUTTON, val)
     
-    return [0xFF,0xFF]
+ #   return [0xFF,0xFF]
 
-pi = pigpio.pi()
+#pi = pigpio.pi()
    
-sr = SN74HC165.PISO(pi, SH_LD=16, OUTPUT_LATCH=26, chips=2, reads_per_second=60, callback=cbf)
+#sr = SN74HC165.PISO(pi, SH_LD=16, OUTPUT_LATCH=26, chips=2, reads_per_second=60, callback=cbf)
 
 #frame.pack_propagate(0)
 
 frame.pack()
 
-katanaUI.katana.assign_boost(1,0x0A)
+#katanaUI.katana.assign_boost(1,0x0A)
 
 katanaUI.read()
 
@@ -540,5 +692,10 @@ katanaUI.read()
 
 root.mainloop()
 
-sr.cancel()
-pi.stop()
+for i in range(16):
+    katanaUI.sr.set_led(i,0)
+    
+time.sleep(2)
+
+katanaUI.sr.cancel()
+katanaUI.pi.stop()

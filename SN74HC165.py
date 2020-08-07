@@ -13,11 +13,20 @@ RBUTTON_MAP = {0:9,1:8,2:10,3:12,4:15,5:13,6:14,7:5,8:6,9:7,10:4,11:0,12:1,13:3,
 BUTTON_MAP = {9:0,8:1,10:2,12:3,15:4,13:5,14:6,5:7,6:8,7:9,4:10,0:11,1:12,3:13,2:14}
 
 # button 7 maps to led pin 0
-LED_MAP = {7:0,6:1,5:2,14:3,13:4,12:5,11:6,10:7,0:13,4:8,3:9,2:10,1:11,0:13,8:15,9:14}
+#LED_MAP = {7:0,6:1,5:2,14:3,13:4,12:5,11:6,10:7,0:13,4:8,3:9,2:10,1:11,0:13,8:15,9:14,15:12}#working
+LED_MAP = {7:0,6:1,5:2,14:3,13:4,12:5,11:6,10:7,4:8,3:9,2:10,1:11,8:12,0:13,9:14,15:15}
 #0,1,2,3,4,5,6,7,8,9,10,11,x12x,13,14,15
 LED_STATE = [0x00,0x00]
 
 BUTTON_STATE = [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]
+
+def set_bit(v, index, x):
+   """Set the index:th bit of v to 1 if x is truthy, else to 0, and return the new value."""
+   mask = 1 << index   # Compute mask, an integer with just bit 'index' set.
+   v &= ~mask          # Clear the bit indicated by the mask (if x is False)
+   if x:
+      v |= mask         # If x was True, set the bit indicated by the mask.
+   return v            # Return the result, we're done.
 
 class PISO(threading.Thread):
    """
@@ -168,15 +177,27 @@ class PISO(threading.Thread):
                   if data[i] != self._last_data[i]:
                      for j in range(8):
                         if ((data[i] & (1<<j)) != (self._last_data[i] & (1<<j))):
-                           self._data_out = self._callback((i*8)+j, (data[i]>>j)&1, read_time)
+                           btn = BUTTON_MAP[(i*8)+j]
+                           ret_val = self._callback(btn, (data[i]>>j)&1, read_time)
+                           if ret_val is not None:
+                              self._data_out = ret_val
             
             self._last_data = data
             #self._outputs[0] = data[0]#[0xFF,0xFF]#data
          self._pi.write(self._OUTPUT_LATCH, 1)
       return data
     
-   def set_data(d):
+   def set_data(self, d):
        self._data_out = d.copy()
+       
+   def set_led(self, led, val):
+      led_pin = LED_MAP[led]
+      #print("LED PIN = " + str(led_pin) + " set to " + str(val))
+      
+      if led_pin > 7:
+         self._data_out[1] = set_bit(self._data_out[1], led_pin - 8, val)
+      else:
+         self._data_out[0] = set_bit(self._data_out[0], led_pin, val)       
 
    def set_callback(self, callback):
       """

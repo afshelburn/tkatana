@@ -236,7 +236,12 @@ class Katana:
     def query_reverb_type(self):
         #d = (0x00,0x00,0x00,0x01)
         return self.query_sysex_byte(REVERB_TYPE)
-
+    
+    def query_channel(self):
+        d = self.query_sysex_data(CURRENT_PRESET_ADDR, 2)
+        #print(str(d))
+        return d[1][0][1]
+    
     def select_channel(self, ch):
         self.send_pc(ch)
 
@@ -291,6 +296,10 @@ class Katana:
 
     def query_amp(self):
         return self.query_sysex_byte(QUERY_AMP)
+    
+    def assign_effect(self, effect_addr, clr, c):
+        addr = self.effective_addr(effect_addr, clr)
+        self.send_sysex_data(addr, (c,))
 
 #    def query_boost(self):
         
@@ -439,7 +448,7 @@ class Katana:
             time.sleep(0.01)
             names.append(res)
         return names
-	
+    
 
 if __name__ == '__main__':
     for test in (PANEL_STATE_ADDR, CURRENT_PRESET_ADDR):
