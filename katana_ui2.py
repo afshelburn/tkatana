@@ -8,10 +8,11 @@ import katana
 import pigpio
 import SN74HC165
 import PatchData
+import center_tk_window as centerTK
 
 root = tk.Tk()
 
-root.attributes('-zoomed',False)
+root.attributes('-zoomed',True)
 
 bh = 42
 bw = 56
@@ -166,6 +167,7 @@ BOOST_TYPE = (0x60,0x00,0x00,0x11)
 FX_TYPE = (0x60,0x00,0x03,0x01)
 DELAY_TYPE = (0x60,0x00,0x05,0x01)
 REVERB_TYPE = (0x60,0x00,0x05,0x41)
+EQ_TYPE = (0x00,0x00,0x00,0x11)
 
 TOGGLES = [BOOST_SW, MOD_SW, FX_SW, DELAY_SW, REVERB_SW]
 COLORS = [BOOST_COLOR, MOD_COLOR, FX_COLOR, DELAY_COLOR, REVERB_COLOR]
@@ -188,7 +190,11 @@ QUERY_AMP = ( 0x60, 0x00, 0x00, 0x21 )
 ParametricEQ = {'LOWCUT':(0, 0, 0, 17, (0x00, 0x00, 0x00, 0x13)),'LOWGAIN':(20, 0, -20, 20, (0x00, 0x00, 0x00, 0x14)),'LOW-MIDFREQ':(0, 13, 0, 27, (0x00, 0x00, 0x00, 0x15)),'LOW-MIDQ':(0, 1, 0, 5, (0x00, 0x00, 0x00, 0x16)),'LOW-MIDGAIN':(20, 0, -20, 20, (0x00, 0x00, 0x00, 0x17)),'HIGH-MIDFREQ':(0, 23, 0, 27, (0x00, 0x00, 0x00, 0x18)),'HIGH-MIDQ':(0, 1, 0, 5, (0x00, 0x00, 0x00, 0x19)),'HIGH-MIDGAIN':(20, 0, -20, 20, (0x00, 0x00, 0x00, 0x1a)),'HIGHGAIN':(20, 0, -20, 20, (0x00, 0x00, 0x00, 0x1b)),'HIGHCUT':(0, 14, 0, 14, (0x00, 0x00, 0x00, 0x1c)),'LEVEL':(20, 0, -20, 20, (0x00, 0x00, 0x00, 0x1d))}
 GraphicEQ = {'31Hz':(24, 0, -24, 24, (0x00, 0x00, 0x00, 0x1e)),'62Hz':(24, 0, -24, 24, (0x00, 0x00, 0x00, 0x1f)),'125Hz':(24, 0, -24, 24, (0x00, 0x00, 0x00, 0x20)),'250Hz':(24, 0, -24, 24, (0x00, 0x00, 0x00, 0x21)),'500Hz':(24, 0, -24, 24, (0x00, 0x00, 0x00, 0x22)),'1KHz':(24, 0, -24, 24, (0x00, 0x00, 0x00, 0x23)),'2KHz':(24, 0, -24, 24, (0x00, 0x00, 0x00, 0x24)),'4KHz':(24, 0, -24, 24, (0x00, 0x00, 0x00, 0x25)),'8KHz':(24, 0, -24, 24, (0x00, 0x00, 0x00, 0x26)),'16KHz':(24, 0, -24, 24, (0x00, 0x00, 0x00, 0x27)),'LEVEL':(24, 0, -24, 24, (0x00, 0x00, 0x00, 0x28))}
 
+chAddr = {0:(0x10,0x00),1:(0x10,0x01),2:(0x10,0x02),3:(0x10,0x03),4:(0x10,0x04),5:(0x10,0x05),6:(0x10,0x06),7:(0x10,0x07),8:(0x10,0x08)}
+
 editors = {}
+
+customFont = tkFont.Font(family="Helvetica", size=7)
 
 class EffectPanel:
     def __init__(self, katana, hw_board, title, toggle_addr, color_addr, effect_addr, level_addr, effects, hw_button, effectsSettings, parent):
@@ -198,7 +204,7 @@ class EffectPanel:
         
         self.colors = ["Green", "Red", "Orange"]
         self.color = tk.IntVar(name=title + ".color",  value=0)
-        self.level = tk.IntVar(name=title + ".level",  value=0)
+        #self.level = tk.IntVar(name=title + ".level",  value=0)
         self.toggle = tk.IntVar(name=title + ".toggle",  value=0)
         self.label = tk.StringVar(name=title + ".label", value=title)
         self.base_title = title
@@ -211,10 +217,14 @@ class EffectPanel:
         self.orange_button = tk.Radiobutton(self.title_frame, text="O", variable=self.color, indicatoron=False, value=2, width=4, fg="orange")
         self.edit_button = tk.Button(self.title_frame, text="Edit", command=self.edit)
         
-        self.edit_button.grid(row=1, columnspan=3, column=0)
+        self.edit_button.grid(row=1, columnspan=1, column=0)
+        
+        self.write_button = tk.Button(self.title_frame, text="Write", command=self.write)
+        
+        self.write_button.grid(row=1, columnspan=1, column=2)
 
-        self.level_slider = Scale(self.title_frame, variable=self.level, from_=level_addr[1], to=level_addr[2], orient="horizontal", length=50)
-        self.level_addr = level_addr
+        #self.level_slider = Scale(self.title_frame, variable=self.level, from_=level_addr[1], to=level_addr[2], orient="horizontal", length=50)
+        #self.level_addr = level_addr
         
         self.toggle_button = Checkbutton(self.title_frame, image=off_image, selectimage=on_image, indicatoron=False, onvalue=1, offvalue=0, variable=self.toggle)
         
@@ -222,7 +232,7 @@ class EffectPanel:
         self.red_button.grid(row=0, column=1)
         self.orange_button.grid(row=0, column=2)
         
-        self.level_slider.grid(row=2, column=0, columnspan=3, sticky=W+E)
+        #self.level_slider.grid(row=2, column=0, columnspan=3, sticky=W+E)
 
         self.toggle_button.grid(row=3, column=0, sticky=N+W+S+E, columnspan=3)
         
@@ -235,7 +245,7 @@ class EffectPanel:
         
         self.color_trace = self.color.trace('w', self.changeColor)
         self.toggle_trace = self.toggle.trace('w', self.toggleState)
-        self.level_trace = self.level.trace('w', self.levelChanged)
+        #self.level_trace = self.level.trace('w', self.levelChanged)
         
         self.hw_button = hw_button
         self.effectsSettings = effectsSettings
@@ -248,10 +258,33 @@ class EffectPanel:
             #print(str(self.effectsSettings[self.effectName]))
             key = self.base_title + "." + self.effectName
             if key in editors:
+                editors[key][0].read()
                 editors[key][0].show()
             else:
                 frm = tk.Toplevel(root, width=480, height=320)
                 editors[key] = (EffectEditor(frm, self.katana, self.effectName, self.effectsSettings[self.effectName]), frm)
+                editors[key][0].read()
+                centerTK.center(root, frm)
+                
+    def write(self, *args):
+        d = self.katana.query_sysex_data(CURRENT_PRESET_ADDR, CURRENT_PRESET_LEN)
+        ch = d[1][0][1]
+        print("Write to channel " + str(ch))
+        chOffset = chAddr[ch]
+        print("Writing " + self.base_title)
+        print(self.effectName)
+        if self.effectName in self.effectsSettings:
+            for setting in self.effectsSettings[self.effectName]:
+                addr = setting[5]
+                #print(setting[0] + "->" + str(addr))
+                addrNew = (chOffset[0], chOffset[1], addr[2], addr[3])
+                tmpVal = self.katana.query_sysex_byte(addr)
+                curVal = self.katana.query_sysex_byte(addrNew)
+                #print("Writing " + str(tmpVal) + " over " + str(curVal))
+                if not tmpVal == curVal:
+                    print(str(setting))
+                    print("Writing " + str(tmpVal) + " over " + str(curVal))
+                    self.katana.send_sysex_data(addrNew, (tmpVal,))
 
         
     def nextEffect(self):
@@ -263,14 +296,17 @@ class EffectPanel:
             return
         self.katana.assign_effect(self.effect_addr, self.color.get(), val[0])
         self.label.set(self.base_title + ": " + val[1])
+        self.effectName = val[1]
         
     def changeColor(self, *args):
         self.katana.send_sysex_data(self.color_addr, (self.color.get(),))
+        self.readEffect()
         
     def levelChanged(self, *args):
-        lvl = self.level_slider.get()
-        print(self.label.get() + " level changed to " + str(lvl))
-        self.katana.send_sysex_data(self.level_addr[0], (lvl,))
+        print("Level changed")
+        #lvl = self.level_slider.get()
+        #print(self.label.get() + " level changed to " + str(lvl))
+        #self.katana.send_sysex_data(self.level_addr[0], (lvl,))
         
     def toggleState(self, *args):
         self.katana.send_sysex_data(self.toggle_addr, (self.toggle.get(),))
@@ -286,13 +322,12 @@ class EffectPanel:
             val = next(self.effectCycle[self.color.get()])
         self.label.set(self.base_title + ": " + val[1])
         self.effectName = val[1]
-        lvl = self.katana.query_sysex_byte(self.level_addr[0])
-        #lvl = self.katana.query_boost_level()
-        print(str(self.level_addr[0]))
-        print(str(lvl))
-        self.level.trace_vdelete('w', self.level_trace)
-        self.level.set(lvl)
-        self.level_trace = self.level.trace('w', self.levelChanged)
+        #lvl = self.katana.query_sysex_byte(self.level_addr[0])
+        #print(str(self.level_addr[0]))
+        #print(str(lvl))
+        #self.level.trace_vdelete('w', self.level_trace)
+        #self.level.set(lvl)
+        #self.level_trace = self.level.trace('w', self.levelChanged)
         
     def readToggle(self):
         res = self.katana.query_sysex_byte(self.toggle_addr)
@@ -416,55 +451,98 @@ class EQToggle(ToggleButton):
         self.geq_button.grid(row=0,column=1)
         self.edit_button.grid(row=0,column=2)
         
+        self.peq_frame = tk.Toplevel(root, width=480, height=320)
+        self.peq = EQEditor(self.katana, "P-EQ", ParametricEQ, self.peq_frame)
+
+        self.geq_frame = tk.Toplevel(root, width=480, height=320)
+        self.geq = EQEditor(self.katana, "G-EQ", GraphicEQ, self.geq_frame)
+        
+        self.geq_frame.withdraw()
+        self.peq_frame.withdraw()
+        
+        self.eq_type_trace = self.eq_type.trace('w', self.selectEQ)
+        
+    def selectEQ(self, *args):
+        print("EQ state changed: " + str(args))
+        self.eq_type.trace_vdelete('w', self.eq_type_trace)
+        val = self.eq_type.get()
+        self.katana.send_sysex_data(EQ_TYPE, (val,))
+        self.eq_type_trace = self.eq_type.trace('w', self.selectEQ)
+        
     def editEQ(self):
         print("Edit EQ")
+        if self.eq_type.get() == 0:
+            self.peq_frame.deiconify()
+            self.peq_frame.attributes("-topmost", True)
+        else:
+            self.geq_frame.deiconify()
+            self.geq_frame.attributes("-topmost", True)
         
+    def read(self):
+        self.peq.read()
+        self.geq.read()
+        eq_type = self.katana.query_sysex_byte(EQ_TYPE)
+        print("EQ Type is " + str(eq_type))
+        self.eq_type.trace_vdelete('w', self.eq_type_trace)
+        self.eq_type.set(eq_type)
+        self.eq_type_trace = self.eq_type.trace('w', self.selectEQ)
         
 class EQEditor:
     def __init__(self, katana, title, levelInfo, parent):
         
         self.katana = katana
-        
-        #self.label = tk.StringVar(name=title + ".label", value=title)
-        #self.base_title = title
-        
-        #self.labelWidget = Label(None, textvariable=self.label)
+
         self.title_frame = tk.LabelFrame(parent, text=title, padx=10, pady=5)
         
-        #self.eq_type = tk.IntVar(name="eq.type", value=0)
-        
-        #self.peq_button = tk.Radiobutton(self.title_frame, text="P-Eq", variable=self.eq_type, indicatoron=False, value=0, width=4)
-        #self.geq_button = tk.Radiobutton(self.title_frame, text="G-Eq", variable=self.eq_type, indicatoron=False, value=1, width=4)
-        #self.edit_button = tk.Button(self.title_frame, text="Edit", command=self.editEQ, width=4)
-        #self.peq_button.grid(row=0,column=0)
-        #self.geq_button.grid(row=0,column=1)
-        #self.edit_button.grid(row=0,column=2)
-        #self.peq_button
-        
-        #self.level_slider = Scale(self.title_frame, variable=self.level, from_=level_addr[1], to=level_addr[2], orient="horizontal", length=50)
+        self.parent = parent
+
         self.levels = []
         col = 0
+        maxCol = 6
+        i = 0
         #levelInfo = {"30Hz":(0,-24,24),"60Hz":(0,-24,24)...}
         for level in levelInfo:
             l = tk.IntVar(name=title + "." + level + ".level",  value=levelInfo[level][1])
             o = "vertical"
-            row = 0
+            row = 0 #int(i / maxCol)
+            i = i + 1
             columnspan = 1
-            if level == "LEVEL":
-                o = "horizontal"
-                row = 2
-                col = 0
-                columnspan = len(self.levels)
+            #if level == "LEVEL":
+            #    o = "horizontal"
+            #    row = 2
+            #    col = 0
+            #    columnspan = len(self.levels)
             slider = Scale(self.title_frame, variable=l, from_=levelInfo[level][3], to=levelInfo[level][2], orient=o, length=100)
             slider.grid(row=row,column=col,columnspan=columnspan)
-            label = Label(self.title_frame, text=level, anchor="center", padx=4)
+            label = Label(self.title_frame, text=level, anchor="center", padx=2, font=customFont)
             label.grid(row=(row+1),column=col,columnspan=columnspan)
             col = col + 1
             trace_level = l.trace('w', self.stateChanged)
-            self.levels.append([l,slider,trace_level,levelInfo[level][4],levelInfo[level][0]])
+            self.levels.append([l,slider,trace_level,levelInfo[level][4],levelInfo[level][0], levelInfo[level][1]])
             
         self.title_frame.grid(row=0,column=0)
             
+        self.reset = tk.Button(self.title_frame, text="Reset", command=self.reset)
+        self.reset.grid(row = 2, column = 0)
+        
+        self.close = tk.Button(self.title_frame, text="Close", command=self.hide)
+        self.close.grid(row = 2, column = len(levelInfo)-1)
+        
+        self.activeEditor = None
+        
+    def reset(self):
+        print("Reset")
+        for level in self.levels:
+            level[1].set(level[5])
+            #self.katana.send_sysex_data(addr, (level[5],))
+            
+    def hide(self):
+        print("Close")
+        self.parent.withdraw()
+        
+    def show(self):
+        print("Showing")
+        self.parent.deiconify()
             
     def stateChanged(self, *args):
         print("Args to state changed:")
@@ -489,6 +567,8 @@ class EQEditor:
             level[0].trace_vdelete('w', level[2])
             level[0].set(val - level[4])
             level[2] = level[0].trace('w', self.stateChanged)
+            
+
 
 class EffectEditor:
     def __init__(self, parent, katana, title, settings):
@@ -504,7 +584,7 @@ class EffectEditor:
         col = 0
         
         self.trace = {}
-        
+        #('MODE', 0, 1, 0, 1, (0x60, 0x00, 0x01, 0x02))
         for setting in self.settings:
             print(str(setting))
             l = tk.IntVar(name=title + "." + setting[0] + ".level",  value=setting[2])
@@ -522,7 +602,7 @@ class EffectEditor:
         self.reset.grid(row = row + 2, column = 0)
         
         self.close = tk.Button(self.title_frame, text="Close", command=self.hide)
-        self.close.grid(row = row + 2, column = len(settings))
+        self.close.grid(row = row + 2, column = len(settings)-1)
             
         self.title_frame.grid(row=0,column=0)
     
@@ -552,19 +632,24 @@ class EffectEditor:
                 #print(str(addr))
                 self.katana.send_sysex_data(addr, (var.get()+setting[1],))
                 break
-                
-        
+
     def read(self):
         i = 0
+        d = self.katana.query_sysex_data(CURRENT_PRESET_ADDR, CURRENT_PRESET_LEN)
+        ch = d[1][0][1]
+        print("Reading effect from channel " + str(ch))
         for setting in self.settings:
             addr = setting[5]
-            print(str(addr))
+            #addrNew = (chOffset[0], chOffset[1], addr[2], addr[3])
+            #print(str(addr))
             val = self.katana.query_sysex_byte(addr) - setting[1]
-            print("Updating " + level[0]._name + " to value " + str(val))
-            var = trace[i][1]
-            trace_id = trace[i][0]
+            #curVal = self.katana.query_sysex_byte(addrNew) - setting[1]
+            #if not val == curVal:
+            print("Updating " + setting[0] + " to value " + str(val))
+            var = self.trace[i][1]
+            trace_id = self.trace[i][0]
             var.trace_vdelete('w', trace_id)
-            var.set(val - level[4])
+            var.set(val)
             trace_id = var.trace('w', self.stateChanged)
             self.trace[i] = (trace_id, var)
             i = i + 1
@@ -624,6 +709,8 @@ class KatanaUI:
         self.nextEffect = EffectSelector(self.katana, "Next Effect", self.effects, root)
         self.nextEffect.title_frame.grid(row=0, column=1)
         
+        self.eq_type = tk.IntVar(name="eq.type", value=0)
+                
         self.eq = EQToggle(self.katana, self.hw_board, "Eq", EQ_HW_BUTTON, root)
         self.eq.title_frame.grid(row=0,column=3)
         self.eq_trace = self.eq.toggle.trace('w', self.eqStateChanged)
@@ -636,13 +723,16 @@ class KatanaUI:
         
         self.selectedChannel = -1
         
-        self.peq_frame = tk.Toplevel(root, width=480, height=320)
-        self.peq = EQEditor(self.katana, "P-EQ", ParametricEQ, self.peq_frame)
+        #self.peq_frame = tk.Toplevel(root, width=480, height=320)
+        #self.peq = EQEditor(self.katana, "P-EQ", ParametricEQ, self.peq_frame)
 
-        self.geq_frame = tk.Toplevel(root, width=480, height=320)
-        self.geq = EQEditor(katana, "G-EQ", GraphicEQ, self.geq_frame)
+        #self.geq_frame = tk.Toplevel(root, width=480, height=320)
+        #self.geq = EQEditor(katana, "G-EQ", GraphicEQ, self.geq_frame)
         
-        self.eq_type = tk.IntVar(name="eq.type", value=0)
+        #self.geq_frame.withdraw()
+        #self.peq_frame.withdraw()
+        
+
         
         #self.effect_frame = tk.Toplevel(root, width=480, height=320)
         #self.editor = EffectEditor(self.effect_frame, self.katana, "T-Wah", PatchData.FX1_TWAH)
@@ -734,8 +824,7 @@ class KatanaUI:
         self.eq.toggle.set(eqState)
         self.eq_trace = self.eq.toggle.trace('w', self.eqStateChanged)
         self.hw_board.set_led(13, eqState)
-        self.peq.read()
-        self.geq.read()
+        self.eq.read()
         
     def read(self):
         for effect in self.effects:
@@ -801,10 +890,15 @@ class KatanaUI:
         else:
             print("Unmuting")
             self.katana.unmute()
-        
-            
+                 
 #mido.set_backend('mido.backends.rtmidi')
 katana = katana.Katana('KATANA MIDI 1',  0,  False)
+
+#katana.send_sysex_data(EDIT_ON)
+print("Sleeping...")
+#time.sleep(2)
+print("Ready")
+
 #katana = katana.Katana('KATANA MIDI 1', 0, False)
 
 katanaUI = KatanaUI(katana)
@@ -842,10 +936,14 @@ else:
 
 root.mainloop()
 
+#katana.send_sysex_data(EDIT_OFF)
+
 for i in range(16):
     katanaUI.hw_board.set_led(i,0)
-    
+
+print("Sleeping...")
 time.sleep(2)
+print("Ready")
 
 katanaUI.hw_board.cancel()
 katanaUI.pi.stop()
