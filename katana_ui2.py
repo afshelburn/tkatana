@@ -162,12 +162,23 @@ FX_COLOR = (0x60, 0x00, 0x06, 0x3B)
 DELAY_COLOR = (0x60, 0x00, 0x06, 0x3C)
 REVERB_COLOR = (0x60, 0x00, 0x06, 0x3D)
 
+BOOST_ASSIGN_COLOR = (0x60,0x00,0x06,0x24)
+MOD_ASSIGN_COLOR = (0x60,0x00,0x06,0x27)
+FX_ASSIGN_COLOR = (0x60,0x00,0x06,0x2A)
+DELAY_ASSIGN_COLOR = (0x60,0x00,0x06,0x2D)
+REVERB_ASSIGN_COLOR = (0x60,0x00,0x06,0x30)
+
+COLOR_ASSIGN = [BOOST_ASSIGN_COLOR, MOD_ASSIGN_COLOR, FX_ASSIGN_COLOR, DELAY_ASSIGN_COLOR, REVERB_ASSIGN_COLOR]
+
 MOD_TYPE = (0x60,0x00,0x01,0x01)
 BOOST_TYPE = (0x60,0x00,0x00,0x11)
 FX_TYPE = (0x60,0x00,0x03,0x01)
 DELAY_TYPE = (0x60,0x00,0x05,0x01)
 REVERB_TYPE = (0x60,0x00,0x05,0x41)
 EQ_TYPE = (0x00,0x00,0x00,0x11)
+
+CHANNEL_EQ_TYPE = (0x60,0x00,0x00,0x41)
+CHANNEL_EQ_SW = (0x60,0x00,0x00,0x40)
 
 TOGGLES = [BOOST_SW, MOD_SW, FX_SW, DELAY_SW, REVERB_SW]
 COLORS = [BOOST_COLOR, MOD_COLOR, FX_COLOR, DELAY_COLOR, REVERB_COLOR]
@@ -184,11 +195,11 @@ LEVELS = {"Boost":(BOOST_LEVEL,0,120),"Mod":(MOD_LEVEL,0,100),"FX":(FX_LEVEL,0,1
 
 QUERY_AMP = ( 0x60, 0x00, 0x00, 0x21 )
 
-#ParametricEQ = {"Low Cut":(0,0,17),"Mid Cut":(5,0,17),"Hi Cut":(5,-17,17)}
-#'LOWCUT':(0, 0, 0, 17, (0x00, 0x00, 0x00, 0x13)),'LOWGAIN':(20, 0, -20, 20, (0x00, 0x00, 0x00, 0x14)),'LOW-MIDFREQ':(0, 13, 0, 27, (0x00, 0x00, 0x00, 0x15)),'LOW-MIDQ':(0, 1, 0, 5, (0x00, 0x00, 0x00, 0x16)),'LOW-MIDGAIN':(20, 0, -20, 20, (0x00, 0x00, 0x00, 0x17)),'HIGH-MIDFREQ':(0, 23, 0, 27, (0x00, 0x00, 0x00, 0x18)),'HIGH-MIDQ':(0, 1, 0, 5, (0x00, 0x00, 0x00, 0x19)),'HIGH-MIDGAIN':(20, 0, -20, 20, (0x00, 0x00, 0x00, 0x1a)),'HIGHGAIN':(20, 0, -20, 20, (0x00, 0x00, 0x00, 0x1b)),'HIGHCUT':(0, 14, 0, 14, (0x00, 0x00, 0x00, 0x1c)),'LEVEL':(20, 0, -20, 20, (0x00, 0x00, 0x00, 0x1d)),'31Hz':(24, 0, -24, 24, (0x00, 0x00, 0x00, 0x1e)),'62Hz':(24, 0, -24, 24, (0x00, 0x00, 0x00, 0x1f)),'125Hz':(24, 0, -24, 24, (0x00, 0x00, 0x00, 0x20)),'250Hz':(24, 0, -24, 24, (0x00, 0x00, 0x00, 0x21)),'500Hz':(24, 0, -24, 24, (0x00, 0x00, 0x00, 0x22)),'1KHz':(24, 0, -24, 24, (0x00, 0x00, 0x00, 0x23)),'2KHz':(24, 0, -24, 24, (0x00, 0x00, 0x00, 0x24)),'4KHz':(24, 0, -24, 24, (0x00, 0x00, 0x00, 0x25)),'8KHz':(24, 0, -24, 24, (0x00, 0x00, 0x00, 0x26)),'16KHz':(24, 0, -24, 24, (0x00, 0x00, 0x00, 0x27)),'LEVEL':(24, 0, -24, 24, (0x00, 0x00, 0x00, 0x28))
-
 ParametricEQ = {'LOWCUT':(0, 0, 0, 17, (0x00, 0x00, 0x00, 0x13)),'LOWGAIN':(20, 0, -20, 20, (0x00, 0x00, 0x00, 0x14)),'LOW-MIDFREQ':(0, 13, 0, 27, (0x00, 0x00, 0x00, 0x15)),'LOW-MIDQ':(0, 1, 0, 5, (0x00, 0x00, 0x00, 0x16)),'LOW-MIDGAIN':(20, 0, -20, 20, (0x00, 0x00, 0x00, 0x17)),'HIGH-MIDFREQ':(0, 23, 0, 27, (0x00, 0x00, 0x00, 0x18)),'HIGH-MIDQ':(0, 1, 0, 5, (0x00, 0x00, 0x00, 0x19)),'HIGH-MIDGAIN':(20, 0, -20, 20, (0x00, 0x00, 0x00, 0x1a)),'HIGHGAIN':(20, 0, -20, 20, (0x00, 0x00, 0x00, 0x1b)),'HIGHCUT':(0, 14, 0, 14, (0x00, 0x00, 0x00, 0x1c)),'LEVEL':(20, 0, -20, 20, (0x00, 0x00, 0x00, 0x1d))}
 GraphicEQ = {'31Hz':(24, 0, -24, 24, (0x00, 0x00, 0x00, 0x1e)),'62Hz':(24, 0, -24, 24, (0x00, 0x00, 0x00, 0x1f)),'125Hz':(24, 0, -24, 24, (0x00, 0x00, 0x00, 0x20)),'250Hz':(24, 0, -24, 24, (0x00, 0x00, 0x00, 0x21)),'500Hz':(24, 0, -24, 24, (0x00, 0x00, 0x00, 0x22)),'1KHz':(24, 0, -24, 24, (0x00, 0x00, 0x00, 0x23)),'2KHz':(24, 0, -24, 24, (0x00, 0x00, 0x00, 0x24)),'4KHz':(24, 0, -24, 24, (0x00, 0x00, 0x00, 0x25)),'8KHz':(24, 0, -24, 24, (0x00, 0x00, 0x00, 0x26)),'16KHz':(24, 0, -24, 24, (0x00, 0x00, 0x00, 0x27)),'LEVEL':(24, 0, -24, 24, (0x00, 0x00, 0x00, 0x28))}
+
+ChParametricEQ = {'LOWCUT':(0, 0, 0, 17, (0x60, 0x00, 0x00, 0x42)),'LOWGAIN':(20, 0, -20, 20, (0x60, 0x00, 0x00, 0x43)),'LOW-MIDFREQ':(0, 13, 0, 27, (0x60, 0x00, 0x00, 0x44)),'LOW-MIDQ':(0, 1, 0, 5, (0x60, 0x00, 0x00, 0x45)),'LOW-MIDGAIN':(20, 0, -20, 20, (0x60, 0x00, 0x00, 0x46)),'HIGH-MIDFREQ':(0, 23, 0, 27, (0x60, 0x00, 0x00, 0x47)),'HIGH-MIDQ':(0, 1, 0, 5, (0x60, 0x00, 0x00, 0x48)),'HIGH-MIDGAIN':(20, 0, -20, 20, (0x60, 0x00, 0x00, 0x49)),'HIGHGAIN':(20, 0, -20, 20, (0x60, 0x00, 0x00, 0x4a)),'HIGHCUT':(0, 14, 0, 14, (0x60, 0x00, 0x00, 0x4b)),'LEVEL':(20, 0, -20, 20, (0x60, 0x00, 0x00, 0x4c))}
+ChGraphicEQ = {'31Hz':(24, 0, -24, 24, (0x60, 0x00, 0x00, 0x4d)),'62Hz':(24, 0, -24, 24, (0x60, 0x00, 0x00, 0x4e)),'125Hz':(24, 0, -24, 24, (0x60, 0x00, 0x00, 0x4f)),'250Hz':(24, 0, -24, 24, (0x60, 0x00, 0x00, 0x50)),'500Hz':(24, 0, -24, 24, (0x60, 0x00, 0x00, 0x51)),'1KHz':(24, 0, -24, 24, (0x60, 0x00, 0x00, 0x52)),'2KHz':(24, 0, -24, 24, (0x60, 0x00, 0x00, 0x53)),'4KHz':(24, 0, -24, 24, (0x60, 0x00, 0x00, 0x54)),'8KHz':(24, 0, -24, 24, (0x60, 0x00, 0x00, 0x55)),'16KHz':(24, 0, -24, 24, (0x60, 0x00, 0x00, 0x56)),'LEVEL':(24, 0, -24, 24, (0x60, 0x00, 0x00, 0x57))}
 
 chAddr = {0:(0x10,0x00),1:(0x10,0x01),2:(0x10,0x02),3:(0x10,0x03),4:(0x10,0x04),5:(0x10,0x05),6:(0x10,0x06),7:(0x10,0x07),8:(0x10,0x08)}
 
@@ -196,8 +207,21 @@ editors = {}
 
 customFont = tkFont.Font(family="Helvetica", size=7)
 
+class Effect:
+    def __init__(self,settings):
+        print("Effect")
+        
+class Patch:
+    def __init__(self, name):
+        self.name = name
+        self.channel = 0
+        
+
+def channelAddress(base, ch):
+    return (chAddr[ch][0], chAddr[ch][1], base[2], base[3])
+
 class EffectPanel:
-    def __init__(self, katana, hw_board, title, toggle_addr, color_addr, effect_addr, level_addr, effects, hw_button, effectsSettings, parent):
+    def __init__(self, katana, hw_board, title, toggle_addr, color_addr, color_assign, effect_addr, level_addr, effects, hw_button, effectsSettings, parent):
         
         self.katana = katana
         self.hw_board = hw_board
@@ -215,13 +239,13 @@ class EffectPanel:
         self.green_button = tk.Radiobutton(self.title_frame, text="G", variable=self.color, indicatoron=False, value=0, width=4, fg="green")
         self.red_button = tk.Radiobutton(self.title_frame, text="R", variable=self.color, indicatoron=False, value=1, width=4, fg="red")
         self.orange_button = tk.Radiobutton(self.title_frame, text="O", variable=self.color, indicatoron=False, value=2, width=4, fg="orange")
-        self.edit_button = tk.Button(self.title_frame, text="Edit", command=self.edit)
+        self.edit_button = tk.Button(self.title_frame, text="E", command=self.edit)
         
-        self.edit_button.grid(row=1, columnspan=1, column=0)
+        self.edit_button.grid(row=4, columnspan=1, column=0)
         
-        self.write_button = tk.Button(self.title_frame, text="Write", command=self.write)
+        self.write_button = tk.Button(self.title_frame, text="W", command=self.write)
         
-        self.write_button.grid(row=1, columnspan=1, column=2)
+        self.write_button.grid(row=4, columnspan=1, column=2)
 
         #self.level_slider = Scale(self.title_frame, variable=self.level, from_=level_addr[1], to=level_addr[2], orient="horizontal", length=50)
         #self.level_addr = level_addr
@@ -241,6 +265,7 @@ class EffectPanel:
         
         self.toggle_addr = toggle_addr
         self.color_addr = color_addr
+        self.color_assign_addr = color_assign
         self.effect_addr = effect_addr
         
         self.color_trace = self.color.trace('w', self.changeColor)
@@ -250,6 +275,7 @@ class EffectPanel:
         self.hw_button = hw_button
         self.effectsSettings = effectsSettings
         self.effectName = None
+        self.effectIndex = None
         
     def edit(self, *args):
         print("Editing " + self.base_title)
@@ -270,33 +296,53 @@ class EffectPanel:
         d = self.katana.query_sysex_data(CURRENT_PRESET_ADDR, CURRENT_PRESET_LEN)
         ch = d[1][0][1]
         print("Write to channel " + str(ch))
-        chOffset = chAddr[ch]
         print("Writing " + self.base_title)
         print(self.effectName)
         if self.effectName in self.effectsSettings:
             for setting in self.effectsSettings[self.effectName]:
                 addr = setting[5]
                 #print(setting[0] + "->" + str(addr))
-                addrNew = (chOffset[0], chOffset[1], addr[2], addr[3])
+                addrNew = channelAddress(addr, ch)
                 tmpVal = self.katana.query_sysex_byte(addr)
                 curVal = self.katana.query_sysex_byte(addrNew)
                 #print("Writing " + str(tmpVal) + " over " + str(curVal))
                 if not tmpVal == curVal:
-                    print(str(setting))
-                    print("Writing " + str(tmpVal) + " over " + str(curVal))
+                    #print(str(setting))
+                    #print("Writing " + str(tmpVal) + " over " + str(curVal))
                     self.katana.send_sysex_data(addrNew, (tmpVal,))
+                    
+        tgl = self.toggle.get()
+        ch_tgl_addr = channelAddress(self.toggle_addr, ch)
+        self.katana.send_sysex_data(ch_tgl_addr, (tgl,))
+        
+        ch_assign_clr_addr = channelAddress(self.color_assign_addr, ch)
+        
+        clr = self.katana.query_sysex_byte(self.color_addr)
+        
+        ch_clr_addr = channelAddress(self.color_addr, ch)
+        
+        self.katana.send_sysex_data(ch_clr_addr, (self.color.get(),))
+        
+        print("Assigning effect " + str(self.effectIndex) + " to color " + str(clr))
 
+        self.katana.assign_effect(ch_assign_clr_addr, clr, self.effectIndex)
+
+        self.katana.send_sysex_data(channelAddress(self.effect_addr, ch), (self.effectIndex,))
+        
+        amp = self.katana.query_sysex_byte(QUERY_AMP)
+        print("Writing amp " + str(amp) + " to patch")
+        self.katana.send_sysex_data(channelAddress(QUERY_AMP,ch),(amp,))
         
     def nextEffect(self):
         print(str(self.color.get()))
         print("Selecting next effect for " + self.colors[self.color.get()] + ": " + self.label.get())
         val = next(self.effectCycle[self.color.get()])
-        print(val)
         if self.katana is None:
             return
-        self.katana.assign_effect(self.effect_addr, self.color.get(), val[0])
+        self.katana.assign_effect(self.color_assign_addr, self.color.get(), val[0])
         self.label.set(self.base_title + ": " + val[1])
         self.effectName = val[1]
+        self.effectIndex = val[0]
         
     def changeColor(self, *args):
         self.katana.send_sysex_data(self.color_addr, (self.color.get(),))
@@ -313,25 +359,24 @@ class EffectPanel:
         self.hw_board.set_led(self.hw_button, self.toggle.get())
     
     def readEffect(self):
-        res = self.katana.query_sysex_byte(self.effect_addr)
+        d = self.katana.query_sysex_data(CURRENT_PRESET_ADDR, CURRENT_PRESET_LEN)
+        ch = d[1][0][1]
+        print("Read from channel " + str(ch))
+        print("Color selected is " + str(self.color.get()) + " should be " + str(self.katana.query_sysex_byte(self.color_addr)))
+        res = self.katana.query_sysex_byte(self.color_assign_addr, self.color.get())
         print("Setting " + self.label.get() + " effect state to " + str(self.effectMap[res]))
         val = next(self.effectCycle[self.color.get()])
         while val[0] != res:
-            #print("val:" + str(val))
-            #print("res:" + str(res))
             val = next(self.effectCycle[self.color.get()])
         self.label.set(self.base_title + ": " + val[1])
         self.effectName = val[1]
-        #lvl = self.katana.query_sysex_byte(self.level_addr[0])
-        #print(str(self.level_addr[0]))
-        #print(str(lvl))
-        #self.level.trace_vdelete('w', self.level_trace)
-        #self.level.set(lvl)
-        #self.level_trace = self.level.trace('w', self.levelChanged)
+        self.effectIndex = val[0]
+        self.label.set(self.base_title + ": " + val[1])
+
         
     def readToggle(self):
         res = self.katana.query_sysex_byte(self.toggle_addr)
-        print("Setting " + self.label.get() + " toggle state to " + str(res))
+        #print("Setting " + self.label.get() + " toggle state to " + str(res))
         self.toggle.trace_vdelete('w', self.toggle_trace)
         self.toggle.set(res)
         self.toggle_trace = self.toggle.trace('w', self.toggleState)
@@ -339,7 +384,7 @@ class EffectPanel:
         
     def readColor(self):
         res = self.katana.query_sysex_byte(self.color_addr)
-        print("Setting " + self.label.get() + " color state to " + str(self.colors[res]))
+        #print("Setting " + self.label.get() + " color state to " + str(self.colors[res]))
         self.color.trace_vdelete('w', self.color_trace)
         self.color.set(res)
         self.color_trace = self.color.trace('w', self.changeColor)
@@ -367,8 +412,6 @@ class ChannelButton:
         self.radio_button.grid(row=0, column=0, sticky=N+W+S+E)
         #ChannelButton.var.trace('w', ChannelButton.stateChanged)
 
-        
-        
 class ToggleButton:
     def __init__(self, katana, hw_board, title, hw_button, parent):
         self.katana = katana
@@ -416,7 +459,7 @@ class RingSelector(MomentaryButton):
         
     def setSelection(self, selection):
         val = next(self.selectionPool)
-        print("Selection: " + str(selection))
+        #print("Selection: " + str(selection))
         while val != selection:
             val = next(self.selectionPool)
             #print(str(val))
@@ -446,16 +489,19 @@ class EQToggle(ToggleButton):
         self.eq_type = tk.IntVar(name="eq.type", value=0)
         self.peq_button = tk.Radiobutton(self.title_frame, text="P-Eq", variable=self.eq_type, indicatoron=False, value=0, width=4)
         self.geq_button = tk.Radiobutton(self.title_frame, text="G-Eq", variable=self.eq_type, indicatoron=False, value=1, width=4)
-        self.edit_button = tk.Button(self.title_frame, text="Edit", command=self.editEQ, width=4)
+        self.edit_button = tk.Button(self.title_frame, text="E", command=self.editEQ, width=4)
+        self.write_button = tk.Button(self.title_frame, text="W", command=self.writeEQ, width=4)
         self.peq_button.grid(row=0,column=0)
-        self.geq_button.grid(row=0,column=1)
-        self.edit_button.grid(row=0,column=2)
+        self.geq_button.grid(row=0,column=2)
+        self.edit_button.grid(row=2,column=0)
+        self.write_button.grid(row=2,column=2)
+        #self.toggle_button.grid(row=2,column=0,columnspan=3)
         
         self.peq_frame = tk.Toplevel(root, width=480, height=320)
-        self.peq = EQEditor(self.katana, "P-EQ", ParametricEQ, self.peq_frame)
+        self.peq = EQEditor(self.katana, "P-EQ", ParametricEQ, ChParametricEQ, self.peq_frame)
 
         self.geq_frame = tk.Toplevel(root, width=480, height=320)
-        self.geq = EQEditor(self.katana, "G-EQ", GraphicEQ, self.geq_frame)
+        self.geq = EQEditor(self.katana, "G-EQ", GraphicEQ, ChGraphicEQ, self.geq_frame)
         
         self.geq_frame.withdraw()
         self.peq_frame.withdraw()
@@ -466,7 +512,7 @@ class EQToggle(ToggleButton):
         print("EQ state changed: " + str(args))
         self.eq_type.trace_vdelete('w', self.eq_type_trace)
         val = self.eq_type.get()
-        self.katana.send_sysex_data(EQ_TYPE, (val,))
+        self.katana.send_sysex_data(CHANNEL_EQ_TYPE, (val,))
         self.eq_type_trace = self.eq_type.trace('w', self.selectEQ)
         
     def editEQ(self):
@@ -478,17 +524,29 @@ class EQToggle(ToggleButton):
             self.geq_frame.deiconify()
             self.geq_frame.attributes("-topmost", True)
         
+    def writeEQ(self):
+        print("Write EQ")
+        d = self.katana.query_sysex_data(CURRENT_PRESET_ADDR, CURRENT_PRESET_LEN)
+        ch = d[1][0][1]
+        print("Writing EQ data to channel " + str(ch))
+        self.katana.send_sysex_data(channelAddress(CHANNEL_EQ_TYPE, ch), (self.eq_type.get(),))
+        self.katana.send_sysex_data(channelAddress(CHANNEL_EQ_SW, ch), (self.toggle.get(),))
+        if self.eq_type.get() == 0:
+            self.peq.write()
+        else:
+            self.geq.write()
+        
     def read(self):
         self.peq.read()
         self.geq.read()
-        eq_type = self.katana.query_sysex_byte(EQ_TYPE)
+        eq_type = self.katana.query_sysex_byte(CHANNEL_EQ_TYPE)
         print("EQ Type is " + str(eq_type))
         self.eq_type.trace_vdelete('w', self.eq_type_trace)
         self.eq_type.set(eq_type)
         self.eq_type_trace = self.eq_type.trace('w', self.selectEQ)
         
 class EQEditor:
-    def __init__(self, katana, title, levelInfo, parent):
+    def __init__(self, katana, title, levelInfo, chLevelInfo, parent):
         
         self.katana = katana
 
@@ -507,18 +565,13 @@ class EQEditor:
             row = 0 #int(i / maxCol)
             i = i + 1
             columnspan = 1
-            #if level == "LEVEL":
-            #    o = "horizontal"
-            #    row = 2
-            #    col = 0
-            #    columnspan = len(self.levels)
             slider = Scale(self.title_frame, variable=l, from_=levelInfo[level][3], to=levelInfo[level][2], orient=o, length=100)
             slider.grid(row=row,column=col,columnspan=columnspan)
             label = Label(self.title_frame, text=level, anchor="center", padx=2, font=customFont)
             label.grid(row=(row+1),column=col,columnspan=columnspan)
             col = col + 1
             trace_level = l.trace('w', self.stateChanged)
-            self.levels.append([l,slider,trace_level,levelInfo[level][4],levelInfo[level][0], levelInfo[level][1]])
+            self.levels.append([l,slider,trace_level,chLevelInfo[level][4],levelInfo[level][0], levelInfo[level][1], chLevelInfo[level][4]])
             
         self.title_frame.grid(row=0,column=0)
             
@@ -536,6 +589,19 @@ class EQEditor:
             level[1].set(level[5])
             #self.katana.send_sysex_data(addr, (level[5],))
             
+    def write(self):
+        d = self.katana.query_sysex_data(CURRENT_PRESET_ADDR, CURRENT_PRESET_LEN)
+        ch = d[1][0][1]
+        print("Writing EQ data to channel " + str(ch))
+        for level in self.levels:
+            #print("Writing value = " + str(level[0].get()+level[4]))
+            self.katana.send_sysex_data(channelAddress(level[6], ch), (level[0].get()+level[4],))
+            #val = self.katana.query_sysex_byte(channelAddress(level[6], ch))
+            #print("Read channel value = " + str(val))
+            #val = self.katana.query_sysex_byte(level[6])
+            #print("Read immediate value = " + str(val))
+            #level[1].set(level[5])
+            
     def hide(self):
         print("Close")
         self.parent.withdraw()
@@ -545,25 +611,22 @@ class EQEditor:
         self.parent.deiconify()
             
     def stateChanged(self, *args):
-        print("Args to state changed:")
-        print(str(args))
-        print(len(args))
         print("Eq state changed")
         for level in self.levels:
             if level[0]._name == args[0]:
                 addr = level[3]
-                print(str(addr))
+                #print(str(addr))
                 val = level[0].get()
-                print("Updating " + level[0]._name + " to value " + str(val))
+                #print("Updating " + level[0]._name + " to value " + str(val))
                 self.katana.send_sysex_data(addr, (val+level[4],))
         
     def read(self):
         print("Reading Eq state")
         for level in self.levels:
             addr = level[3]
-            print(str(addr))
+            #print(str(addr))
             val = self.katana.query_sysex_byte(addr)
-            print("Updating " + level[0]._name + " to value " + str(val))
+            #print("Updating " + level[0]._name + " to value " + str(val))
             level[0].trace_vdelete('w', level[2])
             level[0].set(val - level[4])
             level[2] = level[0].trace('w', self.stateChanged)
@@ -586,7 +649,7 @@ class EffectEditor:
         self.trace = {}
         #('MODE', 0, 1, 0, 1, (0x60, 0x00, 0x01, 0x02))
         for setting in self.settings:
-            print(str(setting))
+            #print(str(setting))
             l = tk.IntVar(name=title + "." + setting[0] + ".level",  value=setting[2])
             o = "vertical"
             row = 0
@@ -623,7 +686,7 @@ class EffectEditor:
         
     def stateChanged(self, *args):
         #print(str(args))
-        print(args[0] + " state changed")
+        #print(args[0] + " state changed")
         for i in range(0,len(self.settings)):
             var = self.trace[i][1]
             if var._name == args[0]:
@@ -645,7 +708,7 @@ class EffectEditor:
             val = self.katana.query_sysex_byte(addr) - setting[1]
             #curVal = self.katana.query_sysex_byte(addrNew) - setting[1]
             #if not val == curVal:
-            print("Updating " + setting[0] + " to value " + str(val))
+            #print("Updating " + setting[0] + " to value " + str(val))
             var = self.trace[i][1]
             trace_id = self.trace[i][0]
             var.trace_vdelete('w', trace_id)
@@ -674,7 +737,7 @@ class KatanaUI:
         col = 0
 
         for item in layout:
-            panel = EffectPanel(self.katana, self.hw_board, item, TOGGLES[col], COLORS[col], EFFECTS[col], LEVELS[item], effect_map[item], HW_BUTTONS[col], effect_settings[item], root)
+            panel = EffectPanel(self.katana, self.hw_board, item, TOGGLES[col], COLORS[col], COLOR_ASSIGN[col], EFFECTS[col], LEVELS[item], effect_map[item], HW_BUTTONS[col], effect_settings[item], root)
             panel.title_frame.grid(row=2, column=col)
             if col == 0:
                 channel = ChannelButton(self.katana, "Panel", col, root)
@@ -698,7 +761,7 @@ class KatanaUI:
 
         ampShortList = []
         for i in AMP_LOOP_SHORT:
-            print(AMP_MAP[i])
+            #print(AMP_MAP[i])
             ampShortList.append((i, AMP_MAP[i]))
             #ampNameList.append(AMP_MAP[i])
             
@@ -722,24 +785,6 @@ class KatanaUI:
         self.controls.append(self.mute)
         
         self.selectedChannel = -1
-        
-        #self.peq_frame = tk.Toplevel(root, width=480, height=320)
-        #self.peq = EQEditor(self.katana, "P-EQ", ParametricEQ, self.peq_frame)
-
-        #self.geq_frame = tk.Toplevel(root, width=480, height=320)
-        #self.geq = EQEditor(katana, "G-EQ", GraphicEQ, self.geq_frame)
-        
-        #self.geq_frame.withdraw()
-        #self.peq_frame.withdraw()
-        
-
-        
-        #self.effect_frame = tk.Toplevel(root, width=480, height=320)
-        #self.editor = EffectEditor(self.effect_frame, self.katana, "T-Wah", PatchData.FX1_TWAH)
-               
-        
-        #editors["Test"] = (self.editor, self.effect_frame)
-        #self.editor.hide()
 
     def hardware_button(self, btn, val, read_time):
         if val != 1:
@@ -770,7 +815,11 @@ class KatanaUI:
                 self.mute.toggle.set(0)
             else:
                 self.mute.toggle.set(1)
-            
+        elif btn == EQ_HW_BUTTON:
+            if self.eq.toggle.get() == 1:
+                self.eq.toggle.set(0)
+            else:
+                self.eq.toggle.set(1)            
         
     def readChannel(self):
         print("Reading channel info")
@@ -819,7 +868,7 @@ class KatanaUI:
         self.nextAmp.setSelection((amp_selection, ampName))
         
     def readEQ(self):
-        eqState = self.katana.query_sysex_byte(EQ_SW)
+        eqState = self.katana.query_sysex_byte(CHANNEL_EQ_SW)
         self.eq.toggle.trace_vdelete('w', self.eq_trace)
         self.eq.toggle.set(eqState)
         self.eq_trace = self.eq.toggle.trace('w', self.eqStateChanged)
@@ -827,9 +876,9 @@ class KatanaUI:
         self.eq.read()
         
     def read(self):
+        self.readChannel()
         for effect in self.effects:
             effect.read()
-        self.readChannel()
         self.readAmp()
         self.readEQ()
         
@@ -874,13 +923,14 @@ class KatanaUI:
         self.readEQ()
         
     def eqStateChanged(self,*args):
+        print("Eq state changed")
         if self.eq.toggle.get():
             print("Setting Eq on")
-            self.katana.send_sysex_data(EQ_SW, (0x01,))
+            self.katana.send_sysex_data(CHANNEL_EQ_SW, (0x01,))
             self.hw_board.set_led(13,1)
         else:
             print("Setting Eq off")
-            self.katana.send_sysex_data(EQ_SW, (0x00,))
+            self.katana.send_sysex_data(CHANNEL_EQ_SW, (0x00,))
             self.hw_board.set_led(13,0)
             
     def muteStateChanged(self, *args):

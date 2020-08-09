@@ -10,7 +10,9 @@ AUX_SPI=1
 RBUTTON_MAP = {0:9,1:8,2:10,3:12,4:15,5:13,6:14,7:5,8:6,9:7,10:4,11:0,12:1,13:3,14:2}
 
 #pin 9 maps to button 0
-BUTTON_MAP = {9:0,8:1,10:2,12:3,15:4,13:5,14:6,5:7,6:8,7:9,4:10,0:11,1:12,3:13,2:14}
+#BUTTON_MAP = {9:0,8:1,10:2,12:3,15:4,13:5,14:6,5:7,6:8,7:9,4:10,0:11,1:12,3:13,2:14}
+
+BUTTON_MAP = {0:11,1:12,2:14,3:13,4:10,5:7,6:8,7:9,8:1,9:0,10:2,12:3,13:5,14:6,15:4}
 
 # button 7 maps to led pin 0
 #LED_MAP = {7:0,6:1,5:2,14:3,13:4,12:5,11:6,10:7,0:13,4:8,3:9,2:10,1:11,0:13,8:15,9:14,15:12}#working
@@ -177,6 +179,7 @@ class PISO(threading.Thread):
                   if data[i] != self._last_data[i]:
                      for j in range(8):
                         if ((data[i] & (1<<j)) != (self._last_data[i] & (1<<j))):
+                           #print("bit " + str(i*8+j) + " changed")
                            btn = BUTTON_MAP[(i*8)+j]
                            ret_val = self._callback(btn, (data[i]>>j)&1, read_time)
                            if ret_val is not None:
@@ -256,7 +259,7 @@ if __name__ == "__main__":
 
    def cbf(pin, level, tick):
       print(pin, level, tick)
-      btn = BUTTON_MAP[pin]
+      btn = pin #BUTTON_MAP[pin]
       print("Button " + str(btn))
       if BUTTON_STATE[btn] == 0:
          BUTTON_STATE[btn] = 1
@@ -286,10 +289,23 @@ if __name__ == "__main__":
    sr = SN74HC165.PISO(
            pi, SH_LD=16, OUTPUT_LATCH=26,
            SPI_device=SN74HC165.AUX_SPI, chips=2,
-           reads_per_second=60, callback=cbf)
+           reads_per_second=30, callback=cbf)
+   
+   time.sleep(1)
+   sr.set_led(8, 0)
 
-   time.sleep(run_for)
-
+   while True:
+      run_for = 0.1
+      #time.sleep(run_for)
+      for i in range(0,15):
+          sr.set_led(i,1)
+          time.sleep(run_for)
+          sr.set_led(i,0)
+          time.sleep(run_for)
+      #for i in range(0,15):
+      #    sr.set_led(i,0)
+      #time.sleep(run_for)
+       
    # read all registers
    r = sr.read()
    # and print each value
