@@ -1,3 +1,5 @@
+#!/usr/bin/python3
+
 import tkinter as tk
 
 from tkinter import *
@@ -17,6 +19,9 @@ root.attributes('-zoomed',True)
 bh = 42
 bw = 56
 
+mainFont = tkFont.nametofont("TkDefaultFont")
+bigFont = tkFont.Font(family="Helvetica", weight="bold", size=60)
+#bigFont.configure(size=30)
 #on_image = tk.PhotoImage(width=96, height=48)
 #off_image = tk.PhotoImage(width=96, height=48)
 #on_image.put(("magenta",), to=(0, 0, 95, 47))
@@ -207,6 +212,18 @@ editors = {}
 
 customFont = tkFont.Font(family="Helvetica", size=7)
 
+def destroyObj(obj):
+    print("Destroy object")
+    obj.destroy()
+        
+def bigMessage(text, seconds):
+    frm = tk.Frame(root)#, width=400, height=200)
+    frm.grid(row=0,column=0,rowspan=3,columnspan=5)
+    #bigFont.configure(size=100)
+    label = tk.Label(frm, text=text, font=bigFont)
+    label.grid(row=0,column=0,sticky="nsew")
+    frm.after(int(seconds*1000), lambda: destroyObj(frm))
+
 class Effect:
     def __init__(self,settings):
         print("Effect")
@@ -343,10 +360,12 @@ class EffectPanel:
         self.label.set(self.base_title + ": " + val[1])
         self.effectName = val[1]
         self.effectIndex = val[0]
+        bigMessage(self.effectName, 1)
         
     def changeColor(self, *args):
         self.katana.send_sysex_data(self.color_addr, (self.color.get(),))
         self.readEffect()
+        bigMessage(self.colors[self.color.get()] + ": " + self.effectName, 1.5)
         
     def levelChanged(self, *args):
         print("Level changed")
@@ -357,6 +376,10 @@ class EffectPanel:
     def toggleState(self, *args):
         self.katana.send_sysex_data(self.toggle_addr, (self.toggle.get(),))
         self.hw_board.set_led(self.hw_button, self.toggle.get())
+        state = ": off"
+        if self.toggle.get():
+            state = ": on"
+        bigMessage(self.effectName + state, 1.5)
     
     def readEffect(self):
         d = self.katana.query_sysex_data(CURRENT_PRESET_ADDR, CURRENT_PRESET_LEN)
@@ -421,13 +444,17 @@ class ToggleButton:
         self.title_frame = tk.LabelFrame(parent, labelwidget=self.labelWidget, padx=10, pady=5)
         self.toggle_button = tk.Checkbutton(self.title_frame, image=off_image, selectimage=on_image, indicatoron=False, variable=self.toggle)
         self.toggle_button.grid(row=1, column=0, sticky=N+W+S+E, columnspan=3)
-        self.toggle.trace('w', self.stateChanged)
+        self.toggle_trace = self.toggle.trace('w', self.stateChanged)
         self.hw_board = hw_board
         self.hw_button = hw_button
         
     def stateChanged(self, *args):
         print(self.text.get() + " changed to " + str(self.toggle.get()))
         self.hw_board.set_led(self.hw_button, self.toggle.get())
+        #state = ": off"
+        #if self.toggle.get():
+        #    state = ": on"
+        #bigMessage(self.text.get() + state, 1.5)
         
 class MomentaryButton:
     def __init__(self, katana, title, command, parent):
@@ -453,6 +480,7 @@ class RingSelector(MomentaryButton):
         self.text.set(self.base_title + ": " + str(newVal[1]))
         self.katana.send_sysex_data(self.addr, (newVal[0],))
         print(str(newVal))
+        bigMessage(str(newVal[1]), 1.5)
         
     def get(self):
         return self.currentSelection
@@ -784,17 +812,51 @@ class KatanaUI:
         self.controls.append(self.eq)
         self.controls.append(self.mute)
         
+        self.closeButton = tk.Button(root, text="Close", command=self.exit)
+        self.closeButton.grid(row=3,column=4)
+        
         self.selectedChannel = -1
+        
+        self.hwButtonPressTime = {}
+        for i in range(0,15):
+            self.hwButtonPressTime[i] = 0
 
     def hardware_button(self, btn, val, read_time):
-        if val != 1:
+        
+        if val == 0:
+            elapsed = read_time - self.hwButtonPressTime[btn]
+        else:
+            self.hwButtonPressTime[btn] = read_time
             return
+        
+        HOLD_TIME = 1.5
+        
+        hold = False
+        
+        #print("Elapsed time: " + str(elapsed))
+        
+        if elapsed > HOLD_TIME:
+            hold = True
+            #print("Detected HOLD")
+        
+        val = 1
+        
+        #bigMessage("Button " + str(btn), 2)
         print("Button: " + str(btn) + " = " + str(val))
         if btn < 5:
-            if self.effects[btn].toggle.get() == 1:
-                self.effects[btn].toggle.set(0)
-            else:
-                self.effects[btn].toggle.set(1)
+            if hold:
+                clr = self.effects[btn].color.get()
+                if clr == 2:
+                    clr = 0
+                else:
+                    clr = clr + 1
+                self.effects[btn].color.set(clr)
+            else:                
+                if self.effects[btn].toggle.get() == 1:
+                    self.effects[btn].toggle.set(0)
+                else:
+                    self.effects[btn].toggle.set(1)
+                    
         elif btn < 10:
             ChannelButton.channel.set(btn-5)
         elif btn == AMP_HW_BUTTON:
@@ -883,6 +945,12 @@ class KatanaUI:
         self.readEQ()
         
     def abStateChanged(self, *args):
+        abVal = self.ab.toggle.get()
+        if abVal == 1:
+            bigMessage("A/B: B", 1.5)
+        else:
+            bigMessage("A/B: A", 1.5)
+            
         self.readPatchNames()
         if ChannelButton.channel.get() > -1:
             self.selectedChannel = ChannelButton.channel.get()
@@ -898,28 +966,35 @@ class KatanaUI:
         if ch >= 0:
             chSel = ch
             
-        print("chSel value = " + str(chSel))
-        if ch == 0:
-            ch = 4 #panel 0x04
-            #print("Selecting channel 4")
-            self.katana.select_channel(ch)
-        elif ch > 0:
-            if self.ab.toggle.get() == 0:
-                ch = ch - 1
-                self.katana.select_channel(ch)
-            else:
-                ch = ch + 4
-                self.katana.select_channel(ch)
-                
-        self.readPatchNames()
-        for effect in self.effects:
-            effect.read()
-        self.readAmp()
         for i in range(0,5):
             self.hw_board.set_led(i+5,0)
         if chSel >= 0:
             print(str(chSel+5) + " set to 1")
             self.hw_board.set_led(chSel+5, 1)
+            
+        print("chSel value = " + str(chSel))
+        if ch == 0:
+            ch = 4 #panel 0x04
+            #print("Selecting channel 4")
+            bigMessage("Panel", 2.5)
+            self.katana.select_channel(ch)
+            
+        elif ch > 0:
+            if self.ab.toggle.get() == 0:
+                ch = ch - 1
+                bigMessage("Ch. " + str(ch+1),2.5)
+                self.katana.select_channel(ch)
+                
+            else:
+                ch = ch + 4
+                bigMessage("Ch. " + str(ch),2.5)
+                self.katana.select_channel(ch)
+                
+                
+        self.readPatchNames()
+        for effect in self.effects:
+            effect.read()
+        self.readAmp()
         self.readEQ()
         
     def eqStateChanged(self,*args):
@@ -928,18 +1003,27 @@ class KatanaUI:
             print("Setting Eq on")
             self.katana.send_sysex_data(CHANNEL_EQ_SW, (0x01,))
             self.hw_board.set_led(13,1)
+            bigMessage("Eq: On",1.5)
         else:
             print("Setting Eq off")
             self.katana.send_sysex_data(CHANNEL_EQ_SW, (0x00,))
             self.hw_board.set_led(13,0)
+            bigMessage("Eq: Off",1.5)
             
     def muteStateChanged(self, *args):
         if self.mute.toggle.get():
             print("Muting")
+            bigMessage("Mute: On", 1.5)
             self.katana.mute()
         else:
             print("Unmuting")
+            bigMessage("Mute: Off", 1.5)
             self.katana.unmute()
+
+    def exit(self):
+        root.destroy()
+
+        
                  
 #mido.set_backend('mido.backends.rtmidi')
 katana = katana.Katana('KATANA MIDI 1',  0,  False)
@@ -965,6 +1049,7 @@ if len(sys.argv) > 1:
     small = int(sys.argv[1])
 else:
     small = 0
+
 
 if small == 1:      
     print("Rendering small UI") 
