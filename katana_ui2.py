@@ -4,6 +4,9 @@ import tkinter as tk
 
 from tkinter import *
 import tkinter.font as tkFont
+
+import tkinter.filedialog as fdialog
+
 from itertools import cycle
 import time
 import katana
@@ -11,6 +14,7 @@ import pigpio
 import SN74HC165
 import PatchData
 import center_tk_window as centerTK
+import json
 
 root = tk.Tk()
 
@@ -196,6 +200,8 @@ REVERB_LEVEL = (0x60,0x00,0x05,0x48)
 MOD_LEVEL = (0x60,0x00,0x06,0x58)
 FX_LEVEL = (0x60,0x00,0x06,0x59)
 
+TOGGLE_MAP = {'Boost':BOOST_SW,'Mod':MOD_SW,'FX':FX_SW,'Delay':DELAY_SW,'Reverb':REVERB_SW}
+
 LEVELS = {"Boost":(BOOST_LEVEL,0,120),"Mod":(MOD_LEVEL,0,100),"FX":(FX_LEVEL,0,100),"Delay":(DELAY_LEVEL,0,100),"Reverb":(REVERB_LEVEL,0,100)}
 
 QUERY_AMP = ( 0x60, 0x00, 0x00, 0x21 )
@@ -293,7 +299,8 @@ class EffectPanel:
         self.effectsSettings = effectsSettings
         self.effectName = None
         self.effectIndex = None
-        
+
+            
     def edit(self, *args):
         print("Editing " + self.base_title)
         print(self.effectName)
@@ -761,11 +768,11 @@ class KatanaUI:
         layout = ["Boost", "Mod", "FX", "Delay", "Reverb"]
 
         effect_map = {"Boost":BOOST_OPTIONS, "Mod":EFFECT_OPTIONS, "FX":EFFECT_OPTIONS, "Delay":DELAY_OPTIONS, "Reverb":REVERB_OPTIONS}
-        effect_settings = {"Boost":PatchData.BOOST_SETTINGS, "Mod":PatchData.FX1_SETTINGS, "FX":PatchData.FX2_SETTINGS, "Delay":PatchData.DELAY_SETTINGS, "Reverb":PatchData.REVERB_SETTINGS}
+        self.effect_settings = {"Boost":PatchData.BOOST_SETTINGS, "Mod":PatchData.FX1_SETTINGS, "FX":PatchData.FX2_SETTINGS, "Delay":PatchData.DELAY_SETTINGS, "Reverb":PatchData.REVERB_SETTINGS}
         col = 0
 
         for item in layout:
-            panel = EffectPanel(self.katana, self.hw_board, item, TOGGLES[col], COLORS[col], COLOR_ASSIGN[col], EFFECTS[col], LEVELS[item], effect_map[item], HW_BUTTONS[col], effect_settings[item], root)
+            panel = EffectPanel(self.katana, self.hw_board, item, TOGGLES[col], COLORS[col], COLOR_ASSIGN[col], EFFECTS[col], LEVELS[item], effect_map[item], HW_BUTTONS[col], self.effect_settings[item], root)
             panel.title_frame.grid(row=2, column=col)
             if col == 0:
                 channel = ChannelButton(self.katana, "Panel", col, root)
@@ -814,12 +821,135 @@ class KatanaUI:
         
         self.closeButton = tk.Button(root, text="Close", command=self.exit)
         self.closeButton.grid(row=3,column=4)
+
+        self.restoreButton = tk.Button(root, text="Restore", command=self.restoreFile)
+        self.restoreButton.grid(row=3,column=1)
+
+        self.saveButton = tk.Button(root, text="Backup", command=self.saveAll)
+        self.saveButton.grid(row=3,column=2)
+        
+        self.saveChButton = tk.Button(root, text="Save Channel", command=self.saveCurrentChannel)
+        self.saveChButton.grid(row=3,column=0)
         
         self.selectedChannel = -1
         
         self.hwButtonPressTime = {}
         for i in range(0,15):
             self.hwButtonPressTime[i] = 0
+    
+    def saveCurrentChannel(self):
+        
+        d = self.katana.query_sysex_data(CURRENT_PRESET_ADDR, CURRENT_PRESET_LEN)
+        ch = d[1][0][1]
+        
+        data = {}
+        
+        self.saveEffect("Boost", ch, data)
+        self.saveEffect("Mod", ch, data)
+        self.saveEffect("FX", ch, data)
+        self.saveEffect("Delay", ch, data)
+        self.saveEffect("Reverb", ch, data)
+        self.saveEQ(ch, data)
+        
+        timestr = time.strftime("%Y%m%d-%H%M%S")
+        f = '/home/pi/channel_' + str(ch) + '_' + timestr + '.json'
+        with open(f, 'w') as outfile:
+            json.dump(data, outfile, indent=4, sort_keys=True)
+            
+    #def restoreChannel(self, ch)
+            
+    def saveAll(self):
+        timestr = time.strftime("%Y%m%d-%H%M%S")
+        f = '/home/pi/amp_settings' + '_' + timestr + '.json'
+        data = {}
+        for i in range(0,9):
+            self.saveEffect("Boost", i, data)
+            self.saveEffect("Mod", i, data)
+            self.saveEffect("FX", i, data)
+            self.saveEffect("Delay", i, data)
+            self.saveEffect("Reverb", i, data)
+        with open(f, 'w') as outfile:
+            json.dump(data, outfile, indent=4, sort_keys=True)
+            
+    def saveEQ(self, ch, data):
+        print("Saving EQ settings")
+        #ParametricEQ = {'LOWCUT':(0, 0, 0, 17, (0x00, 0x00, 0x00, 0x13)),'L
+        eqTypeAddr = channelAddress(CHANNEL_EQ_TYPE, ch)
+        eqSwAddr = channelAddress(CHANNEL_EQ_SW, ch)
+        data['EQ'] = {}
+        data['EQ'][ch] = {}
+        data['EQ'][ch]['STATE'] = []
+        data['EQ'][ch]['STATE'].append(('toggle', eqSwAddr, self.katana.query_sysex_byte(eqSwAddr)))
+        data['EQ'][ch]['STATE'].append(('type', eqTypeAddr, self.katana.query_sysex_byte(eqSwAddr)))
+        data['EQ'][ch]['PEQ'] = []
+        for setting in ChParametricEQ:
+            chAddr = channelAddress(ChParametricEQ[setting][4], ch)
+            val = self.katana.query_sysex_byte(chAddr)
+            data['EQ'][ch]['PEQ'].append((setting, chAddr, val))
+        data['EQ'][ch]['GEQ'] = []
+        for setting in ChGraphicEQ:
+            chAddr = channelAddress(ChGraphicEQ[setting][4], ch)
+            val = self.katana.query_sysex_byte(chAddr)
+            data['EQ'][ch]['GEQ'].append((setting, chAddr, val))
+            
+    def saveEffect(self, effectType, ch, data):
+#         FX1_ADCOMP.append(('SUSTAIN', 0, 50, 0, 100, (0x60, 0x00, 0x01, 0x17)))
+        effectsSettings = self.effect_settings[effectType]
+        data[effectType] = {}
+        print("Saving state for " + effectType)
+        #for i in range(0,9):
+        print("Reading " + effectType + " from channel " + str(ch))
+        data[effectType][ch] = {}
+        data[effectType][ch]['STATE'] = []
+        toggle_addr = channelAddress(TOGGLE_MAP[effectType], ch)
+        data[effectType][ch]['STATE'].append(('toggle', toggle_addr, self.katana.query_sysex_byte(toggle_addr)))
+        for effectName in effectsSettings:
+            print("Reading " + effectName)
+            list = effectsSettings[effectName]
+            data[effectType][ch][effectName] = []
+            for setting in list:
+                print("Reading " + str(setting))
+                chAddr = channelAddress(setting[5], ch)
+                val = self.katana.query_sysex_byte(chAddr)# - setting[1]
+                if val > -1 and val < 128:
+                    data[effectType][ch][effectName].append((setting[0], chAddr, val))
+                else:
+                    print("Failed to store value " + val + " for " + effectName + setting[0] + " = " + str(val))
+        
+    def saveAmp(self, ch, data):
+        print("Saving Amp setting")
+        #ParametricEQ = {'LOWCUT':(0, 0, 0, 17, (0x00, 0x00, 0x00, 0x13)),'L
+        ampAddr = channelAddress(QUERY_AMP, ch)
+        data['AMP'] = {}
+        data['AMP'][ch] = {}
+        data['AMP'][ch]['STATE'] = []
+        data['AMP'][ch]['STATE'].append(('type', ampAddr, self.katana.query_sysex_byte(ampAddr)))
+        
+    def restoreFile(self):
+        filename = fdialog.askopenfilename(initialdir = "/home/pi",title = "Select file",filetypes = (("json files","*.json"),("all files","*.*")))
+        if filename is not None:
+            print(filename)
+            with open(filename, 'r') as json_file:
+                data = json.load(json_file)
+                print("Restoring settings from file")
+                self.restore(data)
+                print("Reading amp settings into UI")
+                self.read()
+    
+    def restore(self, data, targetCh=-1):
+        print("Restoring data")
+        for item in data:
+            for ch in data[item]:
+                for group in data[item][ch]:
+                    print("Restoring " + group)
+                    for setting in data[item][ch][group]:
+                        addr = setting[1]
+                        print(str(setting))
+                        print(setting[0] + " -> " + str(setting[2]) + " @" + str(addr))
+                        if targetCh > -1:
+                            addr = channelAddress(setting[1], targetCh)
+                        val = 0xFF & setting[2]
+                        self.katana.send_sysex_data(addr, (val,))
 
     def hardware_button(self, btn, val, read_time):
         
@@ -1082,3 +1212,4 @@ print("Ready")
 
 katanaUI.hw_board.cancel()
 katanaUI.pi.stop()
+
