@@ -208,7 +208,7 @@ class ADC(threading.Thread):
             if delay > 0.0:
                 time.sleep(delay)
 
-PIN_CS = 16
+PIN_CS = 5
 PIN_CLK = 21
 PIN_DI = 20
 PIN_DO = 19
@@ -224,6 +224,10 @@ class SimpleADC:
         
     def clock(self):       
         self._pi.gpio_trigger(PIN_CLK, 25)
+        #self._pi.write(PIN_CLK, 1)
+        #time.sleep(0.01)
+        #self._pi.write(PIN_CLK, 0)
+        #time.sleep(0.01)
         
     # read SPI data from ADC8032
     def getADC(self, channel):
@@ -231,7 +235,7 @@ class SimpleADC:
     # 1. CS LOW.
 #        GPIO.output(PIN_CS, True)      # clear last transmission
 #        GPIO.output(PIN_CS, False)     # bring CS low
-        
+        #self._pi.write(16,1)
         self._pi.write(PIN_CS, 1)
         self._pi.write(PIN_CS, 0)
 
@@ -294,14 +298,17 @@ if __name__ == "__main__":
     adc = SimpleADC(pi)
 
     while True:
+        pi.write(16, 1)
+        pi.write(PIN_CS, 1)
         
         for i in range(8):
             val = adc.getADC(i)
-            if i == 7:
+            if i == 0:
                 print("Ch " + str(i) + ":" + str(val))
             
-        time.sleep(0.01)
-        
+#         time.sleep(0.5)
+#         pi.write(PIN_CS, 0)
+#         time.sleep(0.5)
 #    adc = ADC038.ADC(
 #           pi, chip_select=16, SPI_device=ADC038.AUX_SPI, channels=8,
 #           reads_per_second=1, callback=cbf)

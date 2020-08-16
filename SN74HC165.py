@@ -12,7 +12,7 @@ RBUTTON_MAP = {0:9,1:8,2:10,3:12,4:15,5:13,6:14,7:5,8:6,9:7,10:4,11:0,12:1,13:3,
 #pin 9 maps to button 0
 #BUTTON_MAP = {9:0,8:1,10:2,12:3,15:4,13:5,14:6,5:7,6:8,7:9,4:10,0:11,1:12,3:13,2:14}
 
-BUTTON_MAP = {0:11,1:12,2:14,3:13,4:10,5:7,6:8,7:9,8:1,9:0,10:2,12:3,13:5,14:6,15:4}
+BUTTON_MAP = {0:11,1:12,2:14,3:13,4:10,5:7,6:8,7:9,8:1,9:0,10:2,12:3,13:5,14:6,15:4} #11:15
 
 # button 7 maps to led pin 0
 #LED_MAP = {7:0,6:1,5:2,14:3,13:4,12:5,11:6,10:7,0:13,4:8,3:9,2:10,1:11,0:13,8:15,9:14,15:12}#working
@@ -164,8 +164,14 @@ class PISO(threading.Thread):
       with self._lock:
          if self._exiting:
             return data
+         
+         
          self._pi.gpio_trigger(self._SH_LD, 1, 0)
+         
          self._pi.write(self._OUTPUT_LATCH, 0)
+         #self._pi.write(self._SH_LD, 0)
+         
+         #time.sleep(0.001)
          read_time = time.time()
          
          count, data = self._pi.spi_xfer(self._h, self._data_out)#_outputs)##[0xFF])##self._chips)
@@ -178,16 +184,21 @@ class PISO(threading.Thread):
                for i in range(self._chips):
                   if data[i] != self._last_data[i]:
                      for j in range(8):
+                        key = (i*8)+j
                         if ((data[i] & (1<<j)) != (self._last_data[i] & (1<<j))):
                            #print("bit " + str(i*8+j) + " changed")
-                           btn = BUTTON_MAP[(i*8)+j]
-                           ret_val = self._callback(btn, (data[i]>>j)&1, read_time)
+                           #if (i*8)+j in BUTTON_MAP:
+                           ret_val = None
+                           if key in BUTTON_MAP:
+                              btn = BUTTON_MAP[key]
+                              ret_val = self._callback(btn, (data[i]>>j)&1, read_time)
                            if ret_val is not None:
                               self._data_out = ret_val
             
             self._last_data = data
             #self._outputs[0] = data[0]#[0xFF,0xFF]#data
          self._pi.write(self._OUTPUT_LATCH, 1)
+         #self._pi.write(self._SH_LD, 1)
       return data
     
    def set_data(self, d):
