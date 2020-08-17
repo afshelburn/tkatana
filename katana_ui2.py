@@ -36,6 +36,9 @@ off_image = tk.PhotoImage(width=bw, height=bh)
 on_image.put(("magenta",), to=(0, 0, bw-1, bh-1))
 off_image.put(("gray",), to=(0, 0, bw-1, bh-1))
 
+MOD_WAH_PEDAL = (0x60,0x00,0x01,0x11)# MOD
+FX_WAH_PEDAL = (0x60,0x00,0x03,0x11) # FX
+        
 BOOST_HW_BUTTON = 0
 MOD_HW_BUTTON = 1
 FX_HW_BUTTON = 2
@@ -952,7 +955,13 @@ class KatanaUI:
                         self.katana.send_sysex_data(addr, (val,))
 
     def pedal_change(self, channel, value, read_time):
-        print("Channel " + str(channel) + " value is " + str(value))
+        pedal_val = int(float(value) / 255.0 * 100)
+        #print("Channel " + str(channel) + " value is " + str(value) + " pedal value is " + str(pedal_val))
+        #self.katana.send_cc(82, pedal_val)
+        self.katana.send_sysex_data(MOD_WAH_PEDAL, (pedal_val,))
+        self.katana.send_sysex_data(FX_WAH_PEDAL, (pedal_val,))
+
+        
         
     def hardware_button(self, btn, val, read_time):
         
