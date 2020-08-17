@@ -3,6 +3,7 @@
 import time
 import threading
 import pigpio
+import ADC038
 
 MAIN_SPI=0
 AUX_SPI=1
@@ -87,10 +88,10 @@ class PISO(threading.Thread):
    Ground -------- GND   8    9 Qh ------> Pi SPI MISO
    """
    SPI_FLAGS_AUX=256   # use auxiliary SPI device
-   SPI_FLAGS_NO_CE0=32 # don't use CE0
+   SPI_FLAGS_NO_CE0=32 | 64 | 128 # don't use CE0-2
 
    def __init__(self, pi, SH_LD, OUTPUT_LATCH, SPI_device=AUX_SPI,
-      chips=1, reads_per_second=100, callback=None):
+      chips=1, reads_per_second=100, callback=None, adc_callback=None, adc_enable=5, adc_channels=1):
       """
       Instantiate with the connection to the Pi.
 
@@ -122,10 +123,10 @@ class PISO(threading.Thread):
       self._SH_LD = SH_LD
 
       assert 0 <= SPI_device <= 1
-      flags = self.SPI_FLAGS_NO_CE0
+      self._flags = self.SPI_FLAGS_NO_CE0
       if SPI_device == AUX_SPI:
-         flags |= self.SPI_FLAGS_AUX
-      self._h = pi.spi_open(0, 5000000, flags)#was 5000000
+         self._flags |= self.SPI_FLAGS_AUX
+      #self._h = pi.spi_open(0, 5000000, self._flags)#was 5000000
 
       #self._h.max_speed_hz = 500000
 
@@ -138,6 +139,8 @@ class PISO(threading.Thread):
       self._chips = chips
 
       self._callback = callback
+      
+      self._adc_callback = adc_callback
 
       self._last_data = [0]*chips
 
@@ -146,6 +149,13 @@ class PISO(threading.Thread):
       self._exiting = False
 
       self.daemon = True
+      
+      self._adc_channels = adc_channels
+      
+      if adc_channels > 0:
+         self._adc = ADC038.SimpleADC(self._pi)
+          
+      self._adc_value = [0]*self._adc_channels
 
       self.start()
 
@@ -160,6 +170,7 @@ class PISO(threading.Thread):
       In addition if a callback is registered it
       will be called for each pin level change.
       """
+      self._h = self._pi.spi_open(0, 5000000, self._flags)#was 5000000
       data = None
       with self._lock:
          if self._exiting:
@@ -198,6 +209,23 @@ class PISO(threading.Thread):
             self._last_data = data
             #self._outputs[0] = data[0]#[0xFF,0xFF]#data
          self._pi.write(self._OUTPUT_LATCH, 1)
+         self._pi.write(self._SH_LD, 1)
+         
+         self._pi.spi_close(self._h)
+         self._h = None
+         
+         sensitivity = 2
+         if self._adc_callback is not None and self._adc_channels > 0:
+            new_adc = [0]*self._adc_channels
+            for i in range(self._adc_channels):
+               #print("Getting value for channel " + str(i))
+               new_adc[i] = self._adc.getADC(i)
+               if abs(new_adc[i] - self._adc_value[i]) > sensitivity:
+                  self._adc_callback(i, new_adc[i], read_time)
+                  self._adc_value[i] = new_adc[i]
+             
+            
+         
          #self._pi.write(self._SH_LD, 1)
       return data
     
@@ -231,6 +259,25 @@ class PISO(threading.Thread):
       """
       with self._lock:
          self._callback = callback
+         
+   def set_adc_callback(self, callback):
+      """
+      Sets the callback function.  The callback will
+      be called for each pin level change.
+
+      The callback receives three parameters:
+         the pin
+         the new level
+         the time of the reading
+
+      There are 8 pins per chip.  The last chip has
+      pins numbered 0 to 7, the next to last chip has
+      pins numbered 8 to 15 etc.
+
+      The callback is cleared by setting it to None.
+      """
+      with self._lock:
+         self._adc_callback = callback         
 
    def set_reads_per_second(self, reads_per_second):
       """
@@ -248,7 +295,8 @@ class PISO(threading.Thread):
       """
       with self._lock:
          self._exiting = True
-         self._pi.spi_close(self._h)
+         if self._h is not None:
+            self._pi.spi_close(self._h)
 
    def run(self):
       self._next_time = time.time()

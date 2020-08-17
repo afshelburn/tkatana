@@ -759,7 +759,7 @@ class KatanaUI:
         
         self.pi = pigpio.pi()
    
-        self.hw_board = SN74HC165.PISO(self.pi, SH_LD=16, OUTPUT_LATCH=26, chips=2, reads_per_second=30)
+        self.hw_board = SN74HC165.PISO(self.pi, SH_LD=16, OUTPUT_LATCH=26, chips=2, reads_per_second=60, adc_enable=5, adc_channels=1)
         
         self.effects = []
         self.channels = []
@@ -951,6 +951,9 @@ class KatanaUI:
                         val = 0xFF & setting[2]
                         self.katana.send_sysex_data(addr, (val,))
 
+    def pedal_change(self, channel, value, read_time):
+        print("Channel " + str(channel) + " value is " + str(value))
+        
     def hardware_button(self, btn, val, read_time):
         
         if val == 0:
@@ -1170,6 +1173,7 @@ katanaUI = KatanaUI(katana)
 katanaUI.read()
 
 katanaUI.hw_board.set_callback(katanaUI.hardware_button)
+katanaUI.hw_board.set_adc_callback(katanaUI.pedal_change)
 
 print(str(sys.argv))
 small = 0
