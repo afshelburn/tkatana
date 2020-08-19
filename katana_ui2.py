@@ -38,6 +38,20 @@ off_image.put(("gray",), to=(0, 0, bw-1, bh-1))
 
 MOD_WAH_PEDAL = (0x60,0x00,0x01,0x11)# MOD
 FX_WAH_PEDAL = (0x60,0x00,0x03,0x11) # FX
+
+MOD_EVH_WAH_PEDAL = (0x60,0x00,0x02,0x4c)
+FX_EVH_WAH_PEDAL = (0x60,0x00,0x04,0x4c)
+
+VOLUME_PEDAL = (0x60,0x00,0x05,0x61)
+
+DELAY_TIME_PEDAL = (0x60,0x00,0x05,0x02)
+
+MOD_TREMOLO_PEDAL = (0x60,0x00,0x02,0x14)
+FX_TREMOLO_PEDAL = (0x60,0x00,0x04,0x14)
+
+FX_BLEND_PEDAL = (0x60,0x00,0x05,0x59) #   INTEGER1x7        0   50   0   100   'PEDAL POS'            PRM_PEDAL_FX_PEDAL_BEND_PEDAL_POS
+FX_BEND_PEDAL = (0x60,0x00,0x05,0x5a) #   INTEGER1x7        0   100   0   100   'EFFECT LEVEL'         PRM_PEDAL_FX_PEDAL_BEND_EFFECT_LE
+
         
 BOOST_HW_BUTTON = 0
 MOD_HW_BUTTON = 1
@@ -328,7 +342,7 @@ class EffectPanel:
         if self.effectName in self.effectsSettings:
             for setting in self.effectsSettings[self.effectName]:
                 addr = setting[5]
-                sz = settings[6]
+                sz = setting[6]
                 #print(setting[0] + "->" + str(addr))
                 addrNew = channelAddress(addr, ch)
                 tmpVal = self.katana.query_sysex_int(addr, sz)
@@ -759,6 +773,43 @@ class EffectEditor:
             self.trace[i] = (trace_id, var)
             i = i + 1
     
+class PedalEditor:
+    def __init__(self, katana, title, pedal_options, initial_value, parent):
+        
+        self.katana = katana
+
+        self.title_frame = tk.LabelFrame(parent, text=title, padx=10, pady=5)
+        
+        self.parent = parent
+
+        self.pedal_option = tk.StringVar(name=title + ".option", value=initial_value)
+        
+        self.pedal_options = pedal_options
+
+        buttons = []
+        for item in pedal_options:
+            button = tk.Radiobutton(self.title_frame, text=item, variable=self.pedal_option, indicatoron=False, value=item)
+            button.grid(row=0,column=len(buttons))
+            buttons.append(button)
+            
+        self.close = tk.Button(self.title_frame, text="Close", command=self.hide)
+        self.close.grid(row = 1, column = len(buttons)-1)
+        
+        self.title_frame.grid(row=0,column=0)
+        
+        self.pedal_option.trace('w', self.set_pedal_map)
+        
+    def hide(self):
+        print("Closing")
+        self.parent.withdraw()
+        
+    def show(self):
+        print("Showing")
+        self.parent.deiconify()
+        
+    def set_pedal_map(self,*args):
+        print("Setting pedal map to " + self.pedal_option.get())
+        
 class KatanaUI:
     def __init__(self, katana):
         
@@ -838,11 +889,36 @@ class KatanaUI:
         self.saveChButton = tk.Button(root, text="Save Channel", command=self.saveCurrentChannel)
         self.saveChButton.grid(row=3,column=0)
         
+        self.editPedalButton = tk.Button(root, text="Pedal 1", command=self.editPedal1)
+        self.editPedalButton.grid(row=3,column=3)
+        
         self.selectedChannel = -1
         
         self.hwButtonPressTime = {}
         for i in range(0,15):
             self.hwButtonPressTime[i] = 0
+            
+        PEDAL_WAH_OPTION = [(FX_WAH_PEDAL,0,100),(MOD_WAH_PEDAL,0,100), (FX_EVH_WAH_PEDAL,0,100), (MOD_EVH_WAH_PEDAL,0,100)]
+        PEDAL_VOLUME_OPTION = [(VOLUME_PEDAL,0,100)]
+        PEDAL_DELAY_TIME_OPTION = [(DELAY_TIME_PEDAL,1,2000)]
+        PEDAL_TREMOLO_RATE_OPTION = [(MOD_TREMOLO_PEDAL,0,100),(FX_TREMOLO_PEDAL,0,100)]
+        PEDAL_FX_BLEND_OPTION = [(FX_BLEND_PEDAL,0,100)]
+        PEDAL_FX_BEND_OPTION = [(FX_BEND_PEDAL,0,100)]
+            
+        self.pedal_options = {'Wah':PEDAL_WAH_OPTION,'Volume':PEDAL_VOLUME_OPTION,'Delay':PEDAL_DELAY_TIME_OPTION,'Tremolo':PEDAL_TREMOLO_RATE_OPTION,'FX Blend':PEDAL_FX_BLEND_OPTION,'FX Bend':PEDAL_FX_BEND_OPTION}
+        self.pedal_map = {}
+        
+        self.pedal_vars = []
+        self.pedal_1_frame = tk.Toplevel(root, width=480, height=320)
+        self.pedal_1_editor = PedalEditor(self.katana, "Pedal 1 Option", self.pedal_options, 'Wah', self.pedal_1_frame)
+        self.pedal_vars.append(self.pedal_1_editor.pedal_option)
+
+        self.pedal_1_frame.withdraw()
+                
+        
+    def editPedal1(self):
+        print("Edit pedal 1")
+        self.pedal_1_editor.show()      
     
     def saveCurrentChannel(self):
         
@@ -962,13 +1038,18 @@ class KatanaUI:
                             self.katana.send_sysex_int(addr, val, 1)
 
     def pedal_change(self, channel, value, read_time):
-        pedal_val = int(float(value) / 255.0 * 100)
-        #print("Channel " + str(channel) + " value is " + str(value) + " pedal value is " + str(pedal_val))
-        #self.katana.send_cc(82, pedal_val)
-        self.katana.send_sysex_data(MOD_WAH_PEDAL, (pedal_val,))
-        self.katana.send_sysex_data(FX_WAH_PEDAL, (pedal_val,))
-
-        
+        pedal_var = self.pedal_vars[channel]
+        #print(pedal_var.get() + " changed, raw value = " + str(value))
+        settings = self.pedal_options[pedal_var.get()] # a list of (address, min, max)
+        for setting in settings:
+            minVal = float(setting[1])
+            maxVal = float(setting[2])
+            mapVal = int(minVal + int(float(value) / 255.0 * maxVal))
+            #print("Setting value = " + str(mapVal))
+            sz = 1
+            if maxVal > 127:
+                sz = 2
+            self.katana.send_sysex_int(setting[0], mapVal, sz)     
         
     def hardware_button(self, btn, val, read_time):
         
