@@ -309,6 +309,10 @@ class Katana:
     def decode_array( ary ):
         return (ary[0] * 0x200000) + (ary[1] * 0x4000) + (ary[2] * 0x80) + ary[3]
     
+    @staticmethod
+    def decode_array2( ary ):
+        return (ary[0] * 0x80) + ary[1]
+    
     # Next (3) query methods return a two-element tuple in the general form:
     # [addrA, addrB, .. ], [ [dataA, .. ], [dataB, .. ], .. ]
 
@@ -394,6 +398,23 @@ class Katana:
 
         (dummy, data) = self.query_sysex_data( eff, 1 )
         return data[0][0]
+    
+    def query_sysex_int( self, addr, size=1, offset=None ):
+        if size == 1:
+            return self.query_sysex_byte(addr, offset)
+        data = self.query_sysex_data(addr, size)
+        return self.decode_array2(data[1][0])
+        
+    def send_sysex_int( self, addr, val, size=1, offset=None ):
+        data = ()
+        if size > 1:
+            data = self.encode_scalar(val) #(0xFF00 & val, 0x00FF & val)
+            data = (data[2], data[3])
+            #print(setting[0] + " encoded = " + str(data))
+        else:
+            data = (val,)
+            
+        self.send_sysex_data(addr, data)
         
     # Send program change
     def send_pc( self, program ):

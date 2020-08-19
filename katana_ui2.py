@@ -222,7 +222,7 @@ editors = {}
 customFont = tkFont.Font(family="Helvetica", size=7)
 
 def destroyObj(obj):
-    print("Destroy object")
+    #print("Destroy object")
     obj.destroy()
         
 def bigMessage(text, seconds):
@@ -328,15 +328,16 @@ class EffectPanel:
         if self.effectName in self.effectsSettings:
             for setting in self.effectsSettings[self.effectName]:
                 addr = setting[5]
+                sz = settings[6]
                 #print(setting[0] + "->" + str(addr))
                 addrNew = channelAddress(addr, ch)
-                tmpVal = self.katana.query_sysex_byte(addr)
-                curVal = self.katana.query_sysex_byte(addrNew)
+                tmpVal = self.katana.query_sysex_int(addr, sz)
+                curVal = self.katana.query_sysex_int(addrNew, sz)
                 #print("Writing " + str(tmpVal) + " over " + str(curVal))
                 if not tmpVal == curVal:
                     #print(str(setting))
                     #print("Writing " + str(tmpVal) + " over " + str(curVal))
-                    self.katana.send_sysex_data(addrNew, (tmpVal,))
+                    self.katana.send_sysex_int(addrNew, tmpVal, sz)
                     
         tgl = self.toggle.get()
         ch_tgl_addr = channelAddress(self.toggle_addr, ch)
@@ -730,8 +731,12 @@ class EffectEditor:
             if var._name == args[0]:
                 setting = self.settings[i]
                 addr = setting[5]
-                #print(str(addr))
-                self.katana.send_sysex_data(addr, (var.get()+setting[1],))
+                sz = setting[6]
+                val = var.get() + setting[1]
+                print(str(setting))
+                print("val = " + str(val))
+                print("sz = " + str(sz))
+                self.katana.send_sysex_int(addr, val, sz)
                 break
 
     def read(self):
@@ -741,12 +746,11 @@ class EffectEditor:
         print("Reading effect from channel " + str(ch))
         for setting in self.settings:
             addr = setting[5]
+            sz = setting[6]
+            print("Setting:" + str(setting))
             #addrNew = (chOffset[0], chOffset[1], addr[2], addr[3])
             #print(str(addr))
-            val = self.katana.query_sysex_byte(addr) - setting[1]
-            #curVal = self.katana.query_sysex_byte(addrNew) - setting[1]
-            #if not val == curVal:
-            #print("Updating " + setting[0] + " to value " + str(val))
+            val = self.katana.query_sysex_int(addr, sz) - setting[1]
             var = self.trace[i][1]
             trace_id = self.trace[i][0]
             var.trace_vdelete('w', trace_id)
@@ -888,12 +892,12 @@ class KatanaUI:
         for setting in ChParametricEQ:
             chAddr = channelAddress(ChParametricEQ[setting][4], ch)
             val = self.katana.query_sysex_byte(chAddr)
-            data['EQ'][ch]['PEQ'].append((setting, chAddr, val))
+            data['EQ'][ch]['PEQ'].append((setting, chAddr, val, 1))
         data['EQ'][ch]['GEQ'] = []
         for setting in ChGraphicEQ:
             chAddr = channelAddress(ChGraphicEQ[setting][4], ch)
             val = self.katana.query_sysex_byte(chAddr)
-            data['EQ'][ch]['GEQ'].append((setting, chAddr, val))
+            data['EQ'][ch]['GEQ'].append((setting, chAddr, val, 1))
             
     def saveEffect(self, effectType, ch, data):
 #         FX1_ADCOMP.append(('SUSTAIN', 0, 50, 0, 100, (0x60, 0x00, 0x01, 0x17)))
@@ -905,7 +909,7 @@ class KatanaUI:
         data[effectType][ch] = {}
         data[effectType][ch]['STATE'] = []
         toggle_addr = channelAddress(TOGGLE_MAP[effectType], ch)
-        data[effectType][ch]['STATE'].append(('toggle', toggle_addr, self.katana.query_sysex_byte(toggle_addr)))
+        data[effectType][ch]['STATE'].append(('toggle', toggle_addr, self.katana.query_sysex_byte(toggle_addr), 1))
         for effectName in effectsSettings:
             print("Reading " + effectName)
             list = effectsSettings[effectName]
@@ -913,11 +917,11 @@ class KatanaUI:
             for setting in list:
                 print("Reading " + str(setting))
                 chAddr = channelAddress(setting[5], ch)
-                val = self.katana.query_sysex_byte(chAddr)# - setting[1]
-                if val > -1 and val < 128:
-                    data[effectType][ch][effectName].append((setting[0], chAddr, val))
-                else:
-                    print("Failed to store value " + val + " for " + effectName + setting[0] + " = " + str(val))
+                val = self.katana.query_sysex_int(chAddr, setting[6])# - setting[1]
+                #if val > -1 and val < 128:
+                data[effectType][ch][effectName].append((setting[0], chAddr, val, setting[6]))
+                #else:
+                #    print("Failed to store value " + val + " for " + effectName + setting[0] + " = " + str(val))
         
     def saveAmp(self, ch, data):
         print("Saving Amp setting")
@@ -926,7 +930,7 @@ class KatanaUI:
         data['AMP'] = {}
         data['AMP'][ch] = {}
         data['AMP'][ch]['STATE'] = []
-        data['AMP'][ch]['STATE'].append(('type', ampAddr, self.katana.query_sysex_byte(ampAddr)))
+        data['AMP'][ch]['STATE'].append(('type', ampAddr, self.katana.query_sysex_byte(ampAddr), 1))
         
     def restoreFile(self):
         filename = fdialog.askopenfilename(initialdir = "/home/pi",title = "Select file",filetypes = (("json files","*.json"),("all files","*.*")))
@@ -951,8 +955,11 @@ class KatanaUI:
                         print(setting[0] + " -> " + str(setting[2]) + " @" + str(addr))
                         if targetCh > -1:
                             addr = channelAddress(setting[1], targetCh)
-                        val = 0xFF & setting[2]
-                        self.katana.send_sysex_data(addr, (val,))
+                        val = setting[2]
+                        if len(setting) > 3:
+                            self.katana.send_sysex_int(addr, val, setting[3])
+                        else:
+                            self.katana.send_sysex_int(addr, val, 1)
 
     def pedal_change(self, channel, value, read_time):
         pedal_val = int(float(value) / 255.0 * 100)
@@ -1164,8 +1171,6 @@ class KatanaUI:
 
     def exit(self):
         root.destroy()
-
-        
                  
 #mido.set_backend('mido.backends.rtmidi')
 katana = katana.Katana('KATANA MIDI 1',  0,  False)
