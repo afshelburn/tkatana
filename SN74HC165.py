@@ -112,6 +112,8 @@ class PISO(threading.Thread):
       """
 
       threading.Thread.__init__(self)
+      
+      self.setDaemon(True)
 
       self._lock = threading.Lock()
 
@@ -297,6 +299,7 @@ class PISO(threading.Thread):
          self._exiting = True
          if self._h is not None:
             self._pi.spi_close(self._h)
+            
 
    def run(self):
       self._next_time = time.time()
