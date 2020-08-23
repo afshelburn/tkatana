@@ -114,24 +114,46 @@ class Katana:
         result[0] = (len // 0x200000) % 0x80
         return result
 
-    def query_color_assignment(self):
+    def query_color_assignment(self, name=None):
         res = []
-        res.append(self.query_sysex_byte(BOOST_ASSIGN_G))
-        res.append(self.query_sysex_byte(BOOST_ASSIGN_R))
-        res.append(self.query_sysex_byte(BOOST_ASSIGN_O))
-        res.append(self.query_sysex_byte(MOD_ASSIGN_G))
-        res.append(self.query_sysex_byte(MOD_ASSIGN_R))
-        res.append(self.query_sysex_byte(MOD_ASSIGN_O))
-        res.append(self.query_sysex_byte(FX_ASSIGN_G))
-        res.append(self.query_sysex_byte(FX_ASSIGN_R))
-        res.append(self.query_sysex_byte(FX_ASSIGN_O))
-        res.append(self.query_sysex_byte(DELAY_ASSIGN_G))
-        res.append(self.query_sysex_byte(DELAY_ASSIGN_R))
-        res.append(self.query_sysex_byte(DELAY_ASSIGN_O))
-        res.append(self.query_sysex_byte(REVERB_ASSIGN_G))
-        res.append(self.query_sysex_byte(REVERB_ASSIGN_R))
-        res.append(self.query_sysex_byte(REVERB_ASSIGN_O))
-        return res
+        if name is not None:
+            if name == 'Boost':
+                res.append(self.query_sysex_byte(BOOST_ASSIGN_G))
+                res.append(self.query_sysex_byte(BOOST_ASSIGN_R))
+                res.append(self.query_sysex_byte(BOOST_ASSIGN_O))
+            elif name == 'Mod':
+                res.append(self.query_sysex_byte(MOD_ASSIGN_G))
+                res.append(self.query_sysex_byte(MOD_ASSIGN_R))
+                res.append(self.query_sysex_byte(MOD_ASSIGN_O))                
+            elif name == 'FX':
+                res.append(self.query_sysex_byte(FX_ASSIGN_G))
+                res.append(self.query_sysex_byte(FX_ASSIGN_R))
+                res.append(self.query_sysex_byte(FX_ASSIGN_O))                
+            elif name == 'Delay':
+                res.append(self.query_sysex_byte(DELAY_ASSIGN_G))
+                res.append(self.query_sysex_byte(DELAY_ASSIGN_R))
+                res.append(self.query_sysex_byte(DELAY_ASSIGN_O))                
+            elif name == 'Reverb':
+                res.append(self.query_sysex_byte(REVERB_ASSIGN_G))
+                res.append(self.query_sysex_byte(REVERB_ASSIGN_R))
+                res.append(self.query_sysex_byte(REVERB_ASSIGN_O))                
+        else:
+            res.append(self.query_sysex_byte(BOOST_ASSIGN_G))
+            res.append(self.query_sysex_byte(BOOST_ASSIGN_R))
+            res.append(self.query_sysex_byte(BOOST_ASSIGN_O))
+            res.append(self.query_sysex_byte(MOD_ASSIGN_G))
+            res.append(self.query_sysex_byte(MOD_ASSIGN_R))
+            res.append(self.query_sysex_byte(MOD_ASSIGN_O))
+            res.append(self.query_sysex_byte(FX_ASSIGN_G))
+            res.append(self.query_sysex_byte(FX_ASSIGN_R))
+            res.append(self.query_sysex_byte(FX_ASSIGN_O))
+            res.append(self.query_sysex_byte(DELAY_ASSIGN_G))
+            res.append(self.query_sysex_byte(DELAY_ASSIGN_R))
+            res.append(self.query_sysex_byte(DELAY_ASSIGN_O))
+            res.append(self.query_sysex_byte(REVERB_ASSIGN_G))
+            res.append(self.query_sysex_byte(REVERB_ASSIGN_R))
+            res.append(self.query_sysex_byte(REVERB_ASSIGN_O))
+        return res  
 
     def assign_boost(self, clr, c):
         addr = self.effective_addr(BOOST_ASSIGN_G, clr)
@@ -457,6 +479,12 @@ class Katana:
         # Finally, restore current pedal position
         self.send_sysex_data( VOLUME_PEDAL_ADDR, (current_volume,) )
 
+    def get_patch_name_addr(self, ch):
+        rq = PATCH_NAME_BASE.copy()
+        rq[1] = rq[1] + ch
+        addr = (rq[0],rq[1],rq[2],rq[3])
+        return addr
+    
     def get_patch_names(self):
         names = []
         for i in range(9):
@@ -466,9 +494,34 @@ class Katana:
             name = self.query_sysex_data(addr,0x10)[1][0]
             res = ''.join(map(chr, name)) 
             print(res)
-            time.sleep(0.01)
+            #time.sleep(0.01)
             names.append(res)
         return names
+    
+    def get_patch_name(self, ch):
+        names = []
+        for i in range(9):
+            rq = PATCH_NAME_BASE.copy()
+            rq[1] = rq[1] + i
+            addr = (rq[0],rq[1],rq[2],rq[3])
+            name = self.query_sysex_data(addr,0x10)[1][0]
+            res = ''.join(map(chr, name)) 
+            print(res)
+            #time.sleep(0.01)
+            names.append(res)
+        return names[ch]
+    
+    def set_patch_name(self, i, name):     
+        rq = PATCH_NAME_BASE.copy()
+        rq[1] = rq[1] + i
+        addr = (rq[0],rq[1],rq[2],rq[3])
+        data = [0x00]*16
+        for c in range(min(16, len(name))):
+            data[c] = ord(name[c])
+        self.send_sysex_data(addr,data)
+        #res = ''.join(map(chr, name)) 
+        #print(res)
+        
     
 
 if __name__ == '__main__':

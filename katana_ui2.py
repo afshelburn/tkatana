@@ -6,6 +6,7 @@ from tkinter import *
 import tkinter.font as tkFont
 
 import tkinter.filedialog as fdialog
+import tkinter.messagebox as messagebox
 
 from itertools import cycle
 import time
@@ -722,12 +723,18 @@ class KatanaUI:
         
         data = {}
         
+        data["Channel"] = {}
+        data["Channel"][ch] = {}
+        data["Channel"][ch]["STATE"] = []
+        data["Channel"][ch]["STATE"].append(('label', self.katana.get_patch_name_addr(ch), self.katana.get_patch_name(ch).strip(), 16))
+        
         self.saveEffect("Boost", ch, data)
         self.saveEffect("Mod", ch, data)
         self.saveEffect("FX", ch, data)
         self.saveEffect("Delay", ch, data)
         self.saveEffect("Reverb", ch, data)
         self.saveEQ(ch, data)
+        self.saveAmp(ch, data)
         
         timestr = time.strftime("%Y%m%d-%H%M%S")
         f = '/home/pi/channel_' + str(ch) + '_' + timestr + '.json'
@@ -741,11 +748,20 @@ class KatanaUI:
         f = '/home/pi/amp_settings' + '_' + timestr + '.json'
         data = {}
         for i in range(0,9):
+            
+            data["Channel"] = {}
+            data["Channel"][i] = {}
+            data["Channel"][i]["STATE"] = []
+            data["Channel"][i]["STATE"].append(('label', self.katana.get_patch_name_addr(i), self.katana.get_patch_name(i).strip(), 16))
+             
             self.saveEffect("Boost", i, data)
             self.saveEffect("Mod", i, data)
             self.saveEffect("FX", i, data)
             self.saveEffect("Delay", i, data)
             self.saveEffect("Reverb", i, data)
+            self.saveEQ(i, data)
+            self.saveAmp(i, data)
+            
         with open(f, 'w') as outfile:
             json.dump(data, outfile, indent=4, sort_keys=True)
             
@@ -763,11 +779,13 @@ class KatanaUI:
         for setting in ChParametricEQ:
             chAddr = channelAddress(ChParametricEQ[setting][4], ch)
             val = self.katana.query_sysex_byte(chAddr)
+            print(str(setting) + " = " + str(val))
             data['EQ'][ch]['PEQ'].append((setting, chAddr, val, 1))
         data['EQ'][ch]['GEQ'] = []
         for setting in ChGraphicEQ:
             chAddr = channelAddress(ChGraphicEQ[setting][4], ch)
             val = self.katana.query_sysex_byte(chAddr)
+            print(str(setting) + " = " + str(val))
             data['EQ'][ch]['GEQ'].append((setting, chAddr, val, 1))
             
     def saveEffect(self, effectType, ch, data):
@@ -782,8 +800,22 @@ class KatanaUI:
         toggle_addr = channelAddress(TOGGLE_MAP[effectType], ch)
         data[effectType][ch]['STATE'].append(('toggle', toggle_addr, self.katana.query_sysex_byte(toggle_addr), 1))
         color_addr = channelAddress(COLOR_MAP[effectType], ch)
-        data[effectType][ch]['STATE'].append(('color', color_addr, self.katana.query_sysex_byte(color_addr), 1))        
-        for effectName in effectsSettings:
+        data[effectType][ch]['STATE'].append(('color', color_addr, self.katana.query_sysex_byte(color_addr), 1))
+        
+        #get current color assignments, and only store settings for those
+        color_assign_addr = COLOR_ASSIGN_MAP[effectType]
+        clr_assignments = self.katana.query_color_assignment(effectType)
+        color_names = ['Green','Red','Orange']
+        color_effect_names = []
+        for i in range(3):
+            addr = self.katana.effective_addr(color_assign_addr, i)
+            addr = channelAddress(addr, ch)
+            data[effectType][ch]['STATE'].append((color_names[i], addr, clr_assignments[i], 1))
+            color_effect_names.append(EFFECT_INDEX_TO_NAME[effectType][clr_assignments[i]])
+        
+        print(str(color_effect_names))
+        
+        for effectName in color_effect_names:
             print("Reading " + effectName)
             list = effectsSettings[effectName]
             data[effectType][ch][effectName] = []
@@ -812,7 +844,17 @@ class KatanaUI:
             with open(filename, 'r') as json_file:
                 data = json.load(json_file)
                 print("Restoring settings from file")
-                self.restore(data)
+                answer = messagebox.askyesnocancel("Question", "Load into current channel?")
+                if answer is None:
+                    return
+                if answer:
+                    d = self.katana.query_sysex_data(CURRENT_PRESET_ADDR, CURRENT_PRESET_LEN)
+                    ch = d[1][0][1]
+                    self.restore(data, ch)
+                else:
+                    self.restore(data)
+                    
+                #self.katana.set_patch_name(1,'test')
                 print("Reading amp settings into UI")
             
             self.read()
@@ -849,8 +891,9 @@ class KatanaUI:
                         ich = int(ch)
                         print(setting[0] + " -> " + str(setting[2]) + " @" + str(addr) + " for ch " + str(ich) + "/" + str(curr_ch))
                         tmpAddr = None
-                        
+                        tmpCh = ich
                         if targetCh > -1:
+                            tmpCh = targetCh
                             addr = channelAddress(setting[1], targetCh)
                             tmpAddr = tempAddress(setting[1])
                         elif ich == curr_ch:
@@ -862,9 +905,13 @@ class KatanaUI:
                                                    
                         val = setting[2]
                         if len(setting) > 3:
-                            self.katana.send_sysex_int(addr, val, setting[3])
-                            if tmpAddr is not None:
-                                self.katana.send_sysex_int(tmpAddr, val, setting[3])
+                            if setting[3] == 2:
+                                self.katana.send_sysex_int(addr, val, setting[3])
+                                if tmpAddr is not None:
+                                    self.katana.send_sysex_int(tmpAddr, val, setting[3])
+                            if setting[3] > 2:#only thing > 2 is patch name
+                                self.katana.set_patch_name(tmpCh, val)
+                                    
                         else:
                             self.katana.send_sysex_int(addr, val, 1)
                             if tmpAddr is not None:
