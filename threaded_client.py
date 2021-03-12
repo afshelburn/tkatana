@@ -174,7 +174,27 @@ class GuiPart:
         console = tk.Button(master, text='Done', command=endCommand)
         console.pack(  )
         # Add more GUI stuff here depending on your specific needs
-        
+        self.subscribers = {}
+    
+    def subscribe(self, pinRange, callback):
+        for pin in pinRange:
+            print("subscribing pin " + str(pin))
+            if pin not in self.subscribers:
+                self.subscribers[pin] = []
+            self.subscribers[pin].append(callback)
+            
+    def unsubscribe(self, pinRange, callback):
+        for pin in pinRange:
+            print("unsubscribing pin " + str(pin))
+            if pin in self.subscribers:
+                self.subscribers[pin].remove(callback)
+                
+    def clear_subscribers(self, pinRange):
+        for pin in pinRange:
+            if pin in self.subscribers:
+                print("unsubscribing pin " + str(pin))
+                self.subscribers[pin].clear()
+    
     def processIncoming(self):
         """Handle all messages currently in the queue, if any."""
         while self.queue.qsize(  ):
@@ -184,6 +204,9 @@ class GuiPart:
                 # Check contents of message and do whatever is needed.
                 print("pin " + str(msg[1]) + " value = " + str(msg[2]))
                 pin = msg[1]
+                if pin in self.subscribers:
+                    for s in self.subscribers[pin]:
+                        s(msg)
                 #val = msg[2]
                 if pin < 16:
                     hw_board.queue.put(msg)
@@ -232,6 +255,12 @@ class ThreadedClient:
         # Start the periodic call in the GUI to check if the queue contains
         # anything
         self.periodicCall(  )
+        self.gui.subscribe(range(16,21), self.event)
+        self.gui.clear_subscribers(range(0,24))
+        
+    def event(self, msg):
+        print("Subscribed event triggered")
+        print(msg)
 
     def periodicCall(self):
         """
