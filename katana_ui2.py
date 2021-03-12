@@ -37,6 +37,9 @@ editors = {}
 
 customFont = tkFont.Font(family="Helvetica", size=7)
 
+adc_knob_count = 5
+adc_exp_pedal = 5
+
 def destroyObj(obj):
     #print("Destroy object")
     obj.destroy()
@@ -120,13 +123,22 @@ class EffectPanel:
         if self.effectName in self.effectsSettings:
             #print(str(self.effectsSettings[self.effectName]))
             key = self.base_title + "." + self.effectName
+
+            # frm = tk.Toplevel(root, width=480, height=320)
+            # e = EffectEditor(frm, self.katana, self.effectName, self.effectsSettings[self.effectName])
+            # e.read()
+            # self.hw_board.set_adc_callback(e.knob_moved)
+            # centerTK.center(root, frm)
+
             if key in editors:
                 editors[key][0].read()
+                self.hw_board.set_adc_callback(editors[key][0].knob_moved)
                 editors[key][0].show()
             else:
                 frm = tk.Toplevel(root, width=480, height=320)
                 editors[key] = (EffectEditor(frm, self.katana, self.effectName, self.effectsSettings[self.effectName]), frm)
                 editors[key][0].read()
+                self.hw_board.set_adc_callback(editors[key][0].knob_moved)
                 centerTK.center(root, frm)
                 
     def write(self, *args):
@@ -517,6 +529,19 @@ class EffectEditor:
         self.close.grid(row = row + 2, column = len(settings)-1)
             
         self.title_frame.grid(row=0,column=0)
+        
+    def knob_moved(self, index, level, tick):
+        if index >= adc_knob_count or index >= len(self.settings):
+            return
+        #map the value to the setting's range
+        frac = float(level)/255.0
+        setting = self.settings[index]
+        var = self.trace[index][1]
+        low = float(setting[3])
+        hi = float(setting[4])
+        newVal = low + frac*(hi-low)
+        print("knob " + str(index) + " adjusted, value = " + str(newVal))
+        var.set(int(newVal))
     
     def reset(self):
         print("Reset")
@@ -528,6 +553,7 @@ class EffectEditor:
     def hide(self):
         print("Closing")
         self.parent.withdraw()
+        #self.parent.destroy()
         
     def show(self):
         print("Showing")
@@ -613,7 +639,7 @@ class KatanaUI:
         
         self.pi = pigpio.pi()
    
-        self.hw_board = SN74HC165.PISO(self.pi, SH_LD=16, OUTPUT_LATCH=26, chips=2, reads_per_second=60, adc_enable=5, adc_channels=1)
+        self.hw_board = SN74HC165.PISO(self.pi, SH_LD=16, OUTPUT_LATCH=26, chips=2, reads_per_second=20, adc_enable=5, adc_channels=adc_knob_count+1)
         
         self.effects = []
         self.channels = []
@@ -704,10 +730,10 @@ class KatanaUI:
         self.pedal_options = {'Wah':PEDAL_WAH_OPTION,'Volume':PEDAL_VOLUME_OPTION,'Delay':PEDAL_DELAY_TIME_OPTION,'Tremolo':PEDAL_TREMOLO_RATE_OPTION,'FX Blend':PEDAL_FX_BLEND_OPTION,'FX Bend':PEDAL_FX_BEND_OPTION}
         self.pedal_map = {}
         
-        self.pedal_vars = []
+        self.pedal_vars = {}
         self.pedal_1_frame = tk.Toplevel(root, width=480, height=320)
         self.pedal_1_editor = PedalEditor(self.katana, "Pedal 1 Option", self.pedal_options, 'Wah', self.pedal_1_frame)
-        self.pedal_vars.append(self.pedal_1_editor.pedal_option)
+        self.pedal_vars[adc_exp_pedal] = (self.pedal_1_editor.pedal_option)
 
         self.pedal_1_frame.withdraw()
                 
@@ -918,6 +944,9 @@ class KatanaUI:
                                 self.katana.send_sysex_int(tmpAddr, val, 1)
 
     def pedal_change(self, channel, value, read_time):
+        if not channel in self.pedal_vars:
+            print(str(channel) + " not associated with pedal")
+            return
         pedal_var = self.pedal_vars[channel]
         #print(pedal_var.get() + " changed, raw value = " + str(value))
         settings = self.pedal_options[pedal_var.get()] # a list of (address, min, max)
@@ -931,7 +960,7 @@ class KatanaUI:
                 sz = 2
             self.katana.send_sysex_int(setting[0], mapVal, sz)     
         
-    def hardware_button(self, btn, val, read_time):
+    def hardware_button(self, piso, btn, val, read_time):
         
         if val == 0:
             elapsed = read_time - self.hwButtonPressTime[btn]
@@ -1148,7 +1177,7 @@ katanaUI = KatanaUI(katana)
 katanaUI.read()
 
 katanaUI.hw_board.set_callback(katanaUI.hardware_button)
-katanaUI.hw_board.set_adc_callback(katanaUI.pedal_change)
+katanaUI.hw_board.set_adc_channel_callback(adc_exp_pedal, katanaUI.pedal_change)
 
 print(str(sys.argv))
 small = 0
@@ -1182,8 +1211,8 @@ root.mainloop()
 
 #katana.send_sysex_data(EDIT_OFF)
 
-katanaUI.hw_board.set_callback(None)
-katanaUI.hw_board.set_adc_callback(None)
+#katanaUI.hw_board.set_callback(None)
+#katanaUI.hw_board.set_adc_callback(None)
 
 for i in range(16):
     katanaUI.hw_board.set_led(i,0)
