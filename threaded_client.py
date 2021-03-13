@@ -76,7 +76,7 @@ class HWBoard(threading.Thread):
                 pin = msg[0]
                 val = msg[1]
                 print("process outgoing")
-                print("pin " + str(msg[1]) + " value = " + str(msg[2]))
+                print("pin " + str(pin) + " value = " + str(val))
                 if pin > 7:
                     self._data_out[1] = self.set_bit(self._data_out[1], pin - 8, val)
                 else:
@@ -1345,17 +1345,19 @@ class KatanaApp:
         while self.queue.qsize(  ):
             try:
                 msg = self.queue.get(0)
-                hw_board = msg[0]
+                #hw_board = msg[0]
                 # Check contents of message and do whatever is needed.
                 print("process incoming")
                 print("pin " + str(msg[1]) + " value = " + str(msg[2]))
                 pin = msg[1]
+                val = msg[2]
+                ticks = msg[3]
                 if pin in self.subscribers:
                     for s in self.subscribers[pin]:
-                        s(msg)
+                        s((pin,val,ticks))
                 #val = msg[2]
-                if pin < 16:
-                    hw_board.queue.put(msg)
+                #if pin < 16:
+                #    hw_board.queue.put(msg)
             except queue.Empty:
                 # just on general principles, although we don't
                 # expect this branch to be taken in this case
