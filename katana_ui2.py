@@ -51,7 +51,6 @@ def bigMessage(text, seconds):
     label = tk.Label(frm, text=text, font=bigFont)
     label.grid(row=0,column=0,sticky="nsew")
     frm.after(int(seconds*1000), lambda: destroyObj(frm))
-       
 
 def channelAddress(base, ch):
     return (chAddr[ch][0], chAddr[ch][1], base[2], base[3])
@@ -767,8 +766,6 @@ class KatanaUI:
         with open(f, 'w') as outfile:
             json.dump(data, outfile, indent=4, sort_keys=True)
             
-    #def restoreChannel(self, ch)
-            
     def saveAll(self):
         timestr = time.strftime("%Y%m%d-%H%M%S")
         f = '/home/pi/amp_settings' + '_' + timestr + '.json'
@@ -884,18 +881,6 @@ class KatanaUI:
                 print("Reading amp settings into UI")
             
             self.read()
-#                 
-#         time.sleep(3)
-#         d = self.katana.query_sysex_data(CURRENT_PRESET_ADDR, CURRENT_PRESET_LEN)
-#         ch = d[1][0][1]
-#         if ch < 8:
-#             #ChannelButton.channel.set(ch+1)
-#             time.sleep(3)
-#             ChannelButton.channel.set(ch)
-#         else:
-#             #ChannelButton.channel.set(ch-1)
-#             time.sleep(3)
-#             ChannelButton.channel.set(ch)
         
     
     def restore(self, data, targetCh=-1):
@@ -1162,32 +1147,21 @@ class KatanaUI:
     def exit(self):
         root.destroy()
                  
-#mido.set_backend('mido.backends.rtmidi')
 katana = katana.Katana('KATANA MIDI 1',  0,  False)
 
-#katana.send_sysex_data(EDIT_ON)
-print("Sleeping...")
-#time.sleep(2)
 print("Ready")
-
-#katana = katana.Katana('KATANA MIDI 1', 0, False)
 
 katanaUI = KatanaUI(katana)
 
 katanaUI.read()
 
-katanaUI.hw_board.set_callback(katanaUI.hardware_button)
-katanaUI.hw_board.set_adc_channel_callback(adc_exp_pedal, katanaUI.pedal_change)
-
 print(str(sys.argv))
 small = 0
 
 if len(sys.argv) > 1:
-    
     small = int(sys.argv[1])
 else:
     small = 0
-
 
 if small == 1:      
     print("Rendering small UI") 
@@ -1197,30 +1171,6 @@ if small == 1:
 else:
     print("Rendering large UI")
 
-
-
-
-#katanaUI.hw_board.set_led(11,1)
-#katanaUI.hw_board.set_led(8,0)
-#katanaUI.hw_board.set_led(12,1)
-#katanaUI.hw_board.set_led(9,1)
-#time.sleep(5)
-#katanaUI.hw_board.set_led(8,1)
-
 root.mainloop()
 
-#katana.send_sysex_data(EDIT_OFF)
-
-#katanaUI.hw_board.set_callback(None)
-#katanaUI.hw_board.set_adc_callback(None)
-
-for i in range(16):
-    katanaUI.hw_board.set_led(i,0)
-
-print("Sleeping...")
-time.sleep(2)
-print("Ready")
-
-katanaUI.hw_board.cancel()
-katanaUI.pi.stop()
 
