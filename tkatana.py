@@ -1,5 +1,3 @@
-#!/usr/bin/python3
-
 import tkinter as tk
 
 from tkinter import *
@@ -12,11 +10,14 @@ from itertools import cycle
 import time
 import katana
 import pigpio
-import SN74HC165
 import PatchData
 import center_tk_window as centerTK
 import json
 from PatchData import *
+import threading
+import random
+import queue
+import math
 
 root = tk.Tk()
 
@@ -38,8 +39,190 @@ editors = {}
 customFont = tkFont.Font(family="Helvetica", size=7)
 
 adc_knob_count = 5
-adc_exp_pedal = 5
+adc_exp_pedal = 6
 
+class HWBoard(threading.Thread):
+    def __init__ (self, clock=21, mosi=20, miso=19, ce0=16, ce1=5, latch=26, reads_per_second=90):
+        threading.Thread.__init__(self)
+        
+        self.daemon = True
+        self._pi = pigpio.pi()
+        self._clock = clock
+        self._mosi = mosi
+        self._miso = miso
+        self._ce0 = ce0
+        self._ce1 = ce1
+        self._latch = latch
+        self._interval = 1.0 / reads_per_second
+        
+        self._chips = 2
+        self._last_data = [0]*self._chips
+        self._data_out = [0]*self._chips
+        self._data_in = [0]*self._chips
+        
+        self._adc_channels = 8
+        self._adc_value = [0]*self._adc_channels
+        
+        self._blink_last = time.time()
+        self._blink_period = 1
+        self._blink_fraction = [1]*8*self._chips
+        
+        self._adc_commands = []
+        
+        self._adc_active_channels = {}
+        
+        for i in range(8):
+            cmd = [1, 1, i & 1, (i & 2) >> 1, (i & 4) >> 2]
+            self._adc_commands.append(cmd)        
+        
+        self.queue = queue.Queue()
+        
+    def stop(self):
+        self._pi.stop()
+        
+    def processOutgoing(self):
+        """Handle all messages currently in the queue, if any."""
+        while self.queue.qsize(  ):
+            try:
+                msg = self.queue.get(0)
+                
+                if isinstance(msg, tuple):
+                    # Check contents of message and do whatever is needed.
+                    pin = msg[0]
+                    val = msg[1]
+                    print("process outgoing")
+                    print("pin " + str(pin) + " value = " + str(val))
+                    if pin > 7:
+                        self._data_out[1] = self.set_bit(self._data_out[1], pin - 8, val)
+                    else:
+                        self._data_out[0] = self.set_bit(self._data_out[0], pin, val)
+                    
+                elif isinstance(msg, set):
+                    #the last entry is the ADC subscribed pins
+                    self._adc_active_channels = msg.copy()
+            
+            except queue.Empty:
+                # just on general principles, although we don't
+                # expect this branch to be taken in this case
+                pass        
+                
+    def set_bit(self, v, index, x):
+        """Set the index:th bit of v to 1 if x is truthy, else to 0, and return the new value."""
+        mask = 1 << index    # Compute mask, an integer with just bit 'index' set.
+        v &= ~mask             # Clear the bit indicated by the mask (if x is False)
+        if x:
+            v |= mask            # If x was True, set the bit indicated by the mask.
+        return v                # Return the result, we're done.
+                
+    def readDigital(self, msgQueue):
+        self._pi.write(self._latch, 0)
+        self._pi.write(self._clock, 0)
+        self._pi.write(self._ce0, 1)
+        
+        self._pi.gpio_trigger(self._clock, 1, 1)
+        
+        self._pi.write(self._ce0, 0)
+        
+        self._pi.gpio_trigger(self._clock, 1, 1)
+        self._pi.write(self._ce0, 1)
+        
+        self._data_in[0] = 0
+        self._data_in[1] = 0
+        
+        read_time = time.time()
+        
+        blink_current = read_time - self._blink_last
+        
+        while blink_current > self._blink_period:
+            self._blink_last = self._blink_last + self._blink_period
+            blink_current = read_time - self._blink_last
+        
+        #tmp = self._data_out
+        
+    # 3. Transfer        
+        for i in range(16):
+            outval = 0
+            if self._data_out[math.floor(i/8)] & (1 << i%8) != 0:
+                # state is one, find which part of the blink state we are in
+                if blink_current < self._blink_fraction[math.floor(i/8)] * self._blink_period:
+                    outval = 1
+            inval = self._pi.read(self._miso)
+            self._pi.write(self._mosi, outval)
+            self._data_in[math.floor(i/8)] |= (inval << i%8)
+            #print("bit " + str(i) + " = " + str(inval))
+            self._pi.gpio_trigger(self._clock, 1, 1)
+        
+    # 4. Output latch
+        self._pi.write(self._ce0, 1)
+        self._pi.write(self._latch, 1)
+        
+        self._pi.gpio_trigger(self._clock, 1, 1)
+        
+        if self._data_in != self._last_data:
+            # Emit callbacks for changed levels.
+            for i in range(self._chips):
+                if self._data_in[i] != self._last_data[i]:
+                    for j in range(8):
+                        key = (i*8)+j
+                        if ((self._data_in[i] & (1<<j)) != (self._last_data[i] & (1<<j))):
+                            #self._callback(self, key, (self._data_in[i]>>j)&1, read_time)
+                            event = (self, key, (self._data_in[i]>>j)&1, read_time)
+                            msgQueue.put(event)
+            
+            self._last_data[0] = self._data_in[0]
+            self._last_data[1] = self._data_in[1]
+            
+    def readAnalog(self, msgQueue):
+        #with self._lock:    
+        sensitivity = 2
+        #only read ADC for current subscribers since the read is costly
+        read_time = time.time()
+        #for i in self._sub
+        for i in self._adc_active_channels:
+            #print("getting value for adc " + str(i))
+            new_adc = self.getADC(i-16)
+            #print("adc " + str(i) + " = " + str(new_adc[i]))
+            if abs(new_adc - self._adc_value[i-16]) > sensitivity:
+                event = (self, i, new_adc, read_time)
+                msgQueue.put(event)
+                self._adc_value[i-16] = new_adc
+                
+    # read SPI data from ADC8038
+    def getADC(self, channel):
+    # 1. CS LOW.
+        #self._pi.write(self._PIN_CLK, 1)
+        self._pi.write(self._ce1, 1)
+        self._pi.write(self._ce1, 0)
+        #self._pi.gpio_trigger(self._clock, 1, 1)
+    # 2. Start clock
+        self._pi.write(self._clock, 0)
+        
+    # 3. Input MUX address
+        cmd = self._adc_commands[channel]
+        #print("Address word:" + str(cmd))
+        for i in cmd: # start bit + mux assignment
+            if (i == 1):
+                self._pi.write(self._mosi,1)
+            else:
+                self._pi.write(self._mosi,0)
+            self._pi.gpio_trigger(self._clock, 1, 1)
+            
+    # 4. read 8 ADC bits
+        ad = 0
+        for i in range(8):
+            self._pi.gpio_trigger(self._clock, 1, 1)
+            ad <<= 1 # shift bit
+            if self._pi.read(self._miso):
+                ad |= 0x1 # set first bit
+
+    # 5. reset
+        self._pi.write(self._ce1, 1)
+        self._pi.write(self._mosi,0)
+        self._pi.gpio_trigger(self._clock, 1, 1)
+        self._pi.gpio_trigger(self._clock, 1, 1)
+
+        return ad                    
+        
 def destroyObj(obj):
     #print("Destroy object")
     obj.destroy()
@@ -59,10 +242,10 @@ def tempAddress(base):
     return (0x60, 0x00, base[2], base[3])
 
 class EffectPanel:
-    def __init__(self, katana, hw_board, title, toggle_addr, color_addr, color_assign, effect_addr, level_addr, effects, hw_button, effectsSettings, parent):
+    def __init__(self, katana, app, title, toggle_addr, color_addr, color_assign, effect_addr, level_addr, effects, hw_button, effectsSettings, parent):
         
         self.katana = katana
-        self.hw_board = hw_board
+        self.app = app
         
         self.colors = ["Green", "Red", "Orange"]
         self.color = tk.IntVar(name=title + ".color",  value=0)
@@ -123,21 +306,15 @@ class EffectPanel:
             #print(str(self.effectsSettings[self.effectName]))
             key = self.base_title + "." + self.effectName
 
-            # frm = tk.Toplevel(root, width=480, height=320)
-            # e = EffectEditor(frm, self.katana, self.effectName, self.effectsSettings[self.effectName])
-            # e.read()
-            # self.hw_board.set_adc_callback(e.knob_moved)
-            # centerTK.center(root, frm)
-
             if key in editors:
                 editors[key][0].read()
-                self.hw_board.set_adc_callback(editors[key][0].knob_moved)
+                self.app.subscribe(range(16,21), editors[key][0].knob_moved)
                 editors[key][0].show()
             else:
                 frm = tk.Toplevel(root, width=480, height=320)
-                editors[key] = (EffectEditor(frm, self.katana, self.effectName, self.effectsSettings[self.effectName]), frm)
+                editors[key] = (EffectEditor(frm, self.katana, self.app, self.effectName, self.effectsSettings[self.effectName]), frm)
                 editors[key][0].read()
-                self.hw_board.set_adc_callback(editors[key][0].knob_moved)
+                self.app.subscribe(range(16,21), editors[key][0].knob_moved)
                 centerTK.center(root, frm)
                 
     def write(self, *args):
@@ -207,7 +384,7 @@ class EffectPanel:
         
     def toggleState(self, *args):
         self.katana.send_sysex_data(self.toggle_addr, (self.toggle.get(),))
-        self.hw_board.set_led(self.hw_button, self.toggle.get())
+        self.app.sendOutput(self.hw_button, self.toggle.get())
         state = ": off"
         if self.toggle.get():
             state = ": on"
@@ -235,7 +412,7 @@ class EffectPanel:
         self.toggle.trace_vdelete('w', self.toggle_trace)
         self.toggle.set(res)
         self.toggle_trace = self.toggle.trace('w', self.toggleState)
-        self.hw_board.set_led(self.hw_button, self.toggle.get())
+        self.app.sendOutput(self.hw_button, self.toggle.get())
         
     def readColor(self):
         res = self.katana.query_sysex_byte(self.color_addr)
@@ -268,7 +445,7 @@ class ChannelButton:
         #ChannelButton.var.trace('w', ChannelButton.stateChanged)
 
 class ToggleButton:
-    def __init__(self, katana, hw_board, title, hw_button, parent):
+    def __init__(self, katana, app, title, hw_button, parent):
         self.katana = katana
         self.toggle = IntVar(name=title + ".toggle", value=0)
         self.text = StringVar(name=title + ".text", value=title)
@@ -277,12 +454,12 @@ class ToggleButton:
         self.toggle_button = tk.Checkbutton(self.title_frame, image=off_image, selectimage=on_image, indicatoron=False, variable=self.toggle)
         self.toggle_button.grid(row=1, column=0, sticky=N+W+S+E, columnspan=3)
         self.toggle_trace = self.toggle.trace('w', self.stateChanged)
-        self.hw_board = hw_board
+        self.app = app
         self.hw_button = hw_button
         
     def stateChanged(self, *args):
         print(self.text.get() + " changed to " + str(self.toggle.get()))
-        self.hw_board.set_led(self.hw_button, self.toggle.get())
+        self.app.sendOutput(self.hw_button, self.toggle.get())
         #state = ": off"
         #if self.toggle.get():
         #    state = ": on"
@@ -344,8 +521,8 @@ class EffectSelector(MomentaryButton):
             activePanel.nextEffect()
 
 class EQToggle(ToggleButton):
-    def __init__(self, katana, hw_board, title, hw_button, parent):
-        super().__init__(katana, hw_board, title, hw_button, parent)
+    def __init__(self, katana, app, title, hw_button, parent):
+        super().__init__(katana, app, title, hw_button, parent)
         self.eq_type = tk.IntVar(name="eq.type", value=0)
         self.peq_button = tk.Radiobutton(self.title_frame, text="P-Eq", variable=self.eq_type, indicatoron=False, value=0, width=4)
         self.geq_button = tk.Radiobutton(self.title_frame, text="G-Eq", variable=self.eq_type, indicatoron=False, value=1, width=4)
@@ -494,9 +671,11 @@ class EQEditor:
 
 
 class EffectEditor:
-    def __init__(self, parent, katana, title, settings):
+    def __init__(self, parent, katana, app, title, settings):
         self.katana = katana
-
+        
+        self.app = app
+        
         self.title_frame = tk.LabelFrame(parent, text=title, padx=10, pady=5)
         
         self.parent = parent
@@ -529,7 +708,11 @@ class EffectEditor:
             
         self.title_frame.grid(row=0,column=0)
         
-    def knob_moved(self, index, level, tick):
+    def knob_moved(self, msg):
+        pin = msg[0]
+        level = msg[1]
+        tick = msg[2]
+        index = pin - 16
         if index >= adc_knob_count or index >= len(self.settings):
             return
         #map the value to the setting's range
@@ -551,6 +734,7 @@ class EffectEditor:
             
     def hide(self):
         print("Closing")
+        self.app.unsubscribe(range(16,21), self.knob_moved)
         self.parent.withdraw()
         #self.parent.destroy()
         
@@ -631,14 +815,16 @@ class PedalEditor:
     def set_pedal_map(self,*args):
         print("Setting pedal map to " + self.pedal_option.get())
         
-class KatanaUI:
-    def __init__(self, katana):
+class KatanaApp:
+    def __init__ (self, master, queue, hw_board, endCommand):
+        self.queue = queue
         
-        self.katana = katana
+        self.hw_board = hw_board
+        # Set up the GUI
+        # Add more GUI stuff here depending on your specific needs
+        self.subscribers = {}
         
-        self.pi = pigpio.pi()
-   
-        self.hw_board = SN74HC165.PISO(self.pi, SH_LD=16, OUTPUT_LATCH=26, chips=2, reads_per_second=20, adc_enable=5, adc_channels=adc_knob_count+1)
+        self.katana = katana.Katana('KATANA MIDI 1',  0,  False)
         
         self.effects = []
         self.channels = []
@@ -651,7 +837,7 @@ class KatanaUI:
         col = 0
 
         for item in layout:
-            panel = EffectPanel(self.katana, self.hw_board, item, TOGGLES[col], COLORS[col], COLOR_ASSIGN[col], EFFECTS[col], LEVELS[item], effect_map[item], HW_BUTTONS[col], self.effect_settings[item], root)
+            panel = EffectPanel(self.katana, self, item, TOGGLES[col], COLORS[col], COLOR_ASSIGN[col], EFFECTS[col], LEVELS[item], effect_map[item], HW_BUTTONS[col], self.effect_settings[item], root)
             panel.title_frame.grid(row=2, column=col)
             if col == 0:
                 channel = ChannelButton(self.katana, "Panel", col, root)
@@ -665,11 +851,11 @@ class KatanaUI:
         
         self.channel_trace = ChannelButton.channel.trace('w', self.channelStateChanged)
     
-        self.mute = ToggleButton(self.katana, self.hw_board, "Mute", MUTE_HW_BUTTON, root)
+        self.mute = ToggleButton(self.katana, self, "Mute", MUTE_HW_BUTTON, root)
         self.mute.title_frame.grid(row=0, column=4)
         self.mute_trace = self.mute.toggle.trace('w', self.muteStateChanged)
 
-        self.ab = ToggleButton(self.katana, self.hw_board, "A/B", AB_HW_BUTTON, root)
+        self.ab = ToggleButton(self.katana, self, "A/B", AB_HW_BUTTON, root)
         self.ab.title_frame.grid(row=0, column=2)
         self.ab_trace = self.ab.toggle.trace('w', self.abStateChanged)
 
@@ -688,7 +874,7 @@ class KatanaUI:
         
         self.eq_type = tk.IntVar(name="eq.type", value=0)
                 
-        self.eq = EQToggle(self.katana, self.hw_board, "Eq", EQ_HW_BUTTON, root)
+        self.eq = EQToggle(self.katana, self, "Eq", EQ_HW_BUTTON, root)
         self.eq.title_frame.grid(row=0,column=3)
         self.eq_trace = self.eq.toggle.trace('w', self.eqStateChanged)
         
@@ -698,7 +884,7 @@ class KatanaUI:
         self.controls.append(self.eq)
         self.controls.append(self.mute)
         
-        self.closeButton = tk.Button(root, text="Close", command=self.exit)
+        self.closeButton = tk.Button(root, text="Close", command=endCommand)
         self.closeButton.grid(row=3,column=4)
 
         self.restoreButton = tk.Button(root, text="Restore", command=self.restoreFile)
@@ -735,6 +921,8 @@ class KatanaUI:
         self.pedal_vars[adc_exp_pedal] = (self.pedal_1_editor.pedal_option)
 
         self.pedal_1_frame.withdraw()
+        
+        self.subscribe(range(0,15), self.hardware_button)
                 
         
     def editPedal1(self):
@@ -945,7 +1133,10 @@ class KatanaUI:
                 sz = 2
             self.katana.send_sysex_int(setting[0], mapVal, sz)     
         
-    def hardware_button(self, piso, btn, val, read_time):
+    def hardware_button(self, msg): #piso, btn, val, read_time):
+        btn = msg[0]
+        val = msg[1]
+        read_time = msg[2]
         
         if val == 0:
             elapsed = read_time - self.hwButtonPressTime[btn]
@@ -984,13 +1175,13 @@ class KatanaUI:
         elif btn < 10:
             ChannelButton.channel.set(btn-5)
         elif btn == AMP_HW_BUTTON:
-            self.hw_board.set_led(AMP_HW_BUTTON, 1)
+            self.sendOutput(AMP_HW_BUTTON, 1)
             self.nextAmp.nextItem()
-            self.hw_board.set_led(AMP_HW_BUTTON, 0)
+            self.sendOutput(AMP_HW_BUTTON, 0)
         elif btn == NEXT_HW_BUTTON:
-            self.hw_board.set_led(NEXT_HW_BUTTON, 1)
+            self.sendOutput(NEXT_HW_BUTTON, 1)
             self.nextEffect.nextItem()
-            self.hw_board.set_led(NEXT_HW_BUTTON, 0)
+            self.sendOutput(NEXT_HW_BUTTON, 0)
         elif btn == AB_HW_BUTTON:
             if self.ab.toggle.get() == 1:
                 self.ab.toggle.set(0)
@@ -1016,7 +1207,7 @@ class KatanaUI:
             abval = 1
         self.ab.toggle.trace_vdelete('w', self.ab_trace)
         self.ab.toggle.set(abval)
-        self.hw_board.set_led(AB_HW_BUTTON, abval)
+        self.sendOutput(AB_HW_BUTTON, abval)
         self.ab_trace = self.ab.toggle.trace('w', self.abStateChanged)
         print("Channel is " + str(ch))
         chSel = -1
@@ -1028,9 +1219,9 @@ class KatanaUI:
         print("Setting channel selected button" + str(chSel))
         ChannelButton.channel.set(chSel)
         for i in range(0,5):
-            self.hw_board.set_led(i+5,0)
+            self.sendOutput(i+5,0)
         if chSel >= 0:
-            self.hw_board.set_led(chSel+5, 1)
+            self.sendOutput(chSel+5, 1)
         self.channel_trace = ChannelButton.channel.trace('w', self.channelStateChanged)
         self.readPatchNames()
 
@@ -1058,7 +1249,7 @@ class KatanaUI:
         self.eq.toggle.trace_vdelete('w', self.eq_trace)
         self.eq.toggle.set(eqState)
         self.eq_trace = self.eq.toggle.trace('w', self.eqStateChanged)
-        self.hw_board.set_led(13, eqState)
+        self.sendOutput(13, eqState)
         self.eq.read()
         
     def read(self):
@@ -1091,10 +1282,10 @@ class KatanaUI:
             chSel = ch
             
         for i in range(0,5):
-            self.hw_board.set_led(i+5,0)
+            self.sendOutput(i+5,0)
         if chSel >= 0:
             print(str(chSel+5) + " set to 1")
-            self.hw_board.set_led(chSel+5, 1)
+            self.sendOutput(chSel+5, 1)
             
         print("chSel value = " + str(chSel))
         if ch == 0:
@@ -1126,12 +1317,12 @@ class KatanaUI:
         if self.eq.toggle.get():
             print("Setting Eq on")
             self.katana.send_sysex_data(CHANNEL_EQ_SW, (0x01,))
-            self.hw_board.set_led(13,1)
+            self.sendOutput(13,1)
             bigMessage("Eq: On",1.5)
         else:
             print("Setting Eq off")
             self.katana.send_sysex_data(CHANNEL_EQ_SW, (0x00,))
-            self.hw_board.set_led(13,0)
+            self.sendOutput(13,0)
             bigMessage("Eq: Off",1.5)
             
     def muteStateChanged(self, *args):
@@ -1143,17 +1334,179 @@ class KatanaUI:
             print("Unmuting")
             bigMessage("Mute: Off", 1.5)
             self.katana.unmute()
+    
+    def subscribe(self, pinRange, callback):
+        update = False
+        for pin in pinRange:
+            print("subscribing pin " + str(pin))
+            if pin not in self.subscribers:
+                self.subscribers[pin] = []
+                if pin > 15:
+                    update = True
+            self.subscribers[pin].append(callback)
+        if update:
+            pins = set()
+            for pin in self.subscribers:
+                if pin > 15:
+                    pins.add(pin)
+            self.hw_board.queue.put(pins)
+            
+    def unsubscribe(self, pinRange, callback):
+        for pin in pinRange:
+            print("unsubscribing pin " + str(pin))
+            if pin in self.subscribers:
+                self.subscribers[pin].remove(callback)
+                if len(self.subscribers[pin]) == 0:
+                    self.subscribers.pop(pin, None)
+        pins = set()
+        for pin in self.subscribers:
+            if pin > 15:
+                pins.add(pin)
+        self.hw_board.queue.put(pins)        
+                
+    def clear_subscribers(self, pinRange):
+        for pin in pinRange:
+            if pin in self.subscribers:
+                print("unsubscribing pin " + str(pin))
+                self.subscribers[pin].clear()
+                self.subscribers.pop(pin, None)
+        pins = set()
+        self.hw_board.queue.put(pins)                
+                
+    def sendOutput(self, pin, level):
+        ticks = time.time()
+        msg = (pin, level, ticks)
+        self.hw_board.queue.put(msg)
+    
+    def processIncoming(self):
+        """Handle all messages currently in the queue, if any."""
+        while self.queue.qsize(  ):
+            try:
+                msg = self.queue.get(0)
+                #hw_board = msg[0]
+                # Check contents of message and do whatever is needed.
+                print("process incoming")
+                print("pin " + str(msg[1]) + " value = " + str(msg[2]))
+                pin = msg[1]
+                val = msg[2]
+                ticks = msg[3]
+                if pin in self.subscribers:
+                    for s in self.subscribers[pin]:
+                        s((pin,val,ticks))
+                #val = msg[2]
+                #if pin < 16:
+                #    hw_board.queue.put(msg)
+            except queue.Empty:
+                # just on general principles, although we don't
+                # expect this branch to be taken in this case
+                pass
 
-    def exit(self):
-        root.destroy()
-                 
-katana = katana.Katana('KATANA MIDI 1',  0,  False)
+class ThreadedClient:
+    """
+    Launch the main part of the GUI and the worker thread. periodicCall and
+    endApplication could reside in the GUI part, but putting them here
+    means that you have all the thread controls in a single place.
+    """
+    def __init__(self, master):
+        """
+        Start the GUI and the asynchronous threads. We are in the main
+        (original) thread of the application, which will later be used by
+        the GUI as well. We spawn a new thread for the worker (I/O).
+        """
+        self.master = master
+
+        # Create the queue
+        self.queue = queue.Queue(  )
+        
+        self.hw_board = HWBoard()
+
+        # Set up the GUI part
+        self.gui = KatanaApp(master, self.queue, self.hw_board, self.endApplication)
+        
+        self.master.protocol("WM_DELETE_WINDOW", self.close_window)
+
+        # Set up the thread to do asynchronous I/O
+        # More threads can also be created and used, if necessary
+        self.running = 1
+        
+        self._next_time = time.time()
+        
+        reads_per_second = 60
+        
+        self._interval = 1.0 / reads_per_second
+        
+        self.hw_thread = threading.Thread(target=self.hw_update)
+        self.hw_thread.start(  )
+
+        # Start the periodic call in the GUI to check if the queue contains
+        # anything
+        self.periodicCall(  )
+        #self.gui.subscribe(range(16,21), self.event)
+        #self.gui.clear_subscribers(range(0,24))
+        self.gui.read()
+        
+    def event(self, msg):
+        print("Subscribed event triggered")
+        print(msg)
+
+    def periodicCall(self):
+        """
+        Check every 100 ms if there is something new in the queue.
+        """
+        self.gui.processIncoming()
+        if not self.running:
+            import sys
+            sys.exit(1)
+        self.master.after(100, self.periodicCall)
+
+    def hw_update(self):
+        """
+        This is where we handle the asynchronous I/O. For example, it may be
+        a 'select(  )'. One important thing to remember is that the thread has
+        to yield control pretty regularly, by select or otherwise.
+        """
+        self._next_time = time.time()
+        avgAnalogReadTime = 0
+        avgDigitalReadTime = 0
+        avgReadTime = 0
+        nReads = 0.0
+        while self.running:
+            self.hw_board.processOutgoing()
+            start_time = time.time()
+            self.hw_board.readDigital(self.queue)
+            digital_time = time.time()
+            self.hw_board.readAnalog(self.queue)
+            finish_time = time.time()
+
+            nReads = nReads + 1.0
+            avgDigitalReadTime = avgDigitalReadTime + digital_time - start_time
+            avgAnalogReadTime = avgAnalogReadTime + finish_time - digital_time
+            avgReadTime = avgReadTime + finish_time - start_time
+            self._next_time += self._interval
+            delay = self._next_time - time.time()
+            if delay > 0.0:
+                time.sleep(delay)
+                
+        print("Digital read:" + str(avgDigitalReadTime/nReads))
+        print("Analog read:" + str(avgAnalogReadTime/nReads))
+        print("Total time to read:" + str(avgReadTime/nReads))        
+        
+        self.hw_board.stop()
+
+    def endApplication(self):
+        for i in range(0,16):
+            self.gui.sendOutput(i,0)
+        time.sleep(1)
+        self.running = 0
+        
+    def close_window(self):
+        print( "Window closed")
+        self.endApplication()
+
+
+client = ThreadedClient(root)
 
 print("Ready")
-
-katanaUI = KatanaUI(katana)
-
-katanaUI.read()
 
 print(str(sys.argv))
 small = 0
@@ -1171,6 +1524,4 @@ if small == 1:
 else:
     print("Rendering large UI")
 
-root.mainloop()
-
-
+root.mainloop(  )

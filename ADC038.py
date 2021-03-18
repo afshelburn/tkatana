@@ -27,18 +27,18 @@ class SimpleADC:
         #self._pi.set_mode(self._PIN_CLK, pigpio.OUTPUT)
         
     def clock(self):       
-        self._pi.gpio_trigger(self._PIN_CLK, 25)
+        self._pi.gpio_trigger(self._PIN_CLK, 2, 1)
 
     # read SPI data from ADC8038
     def getADC(self, channel):
-
     # 1. CS LOW.
+        #self._pi.write(self._PIN_CLK, 1)
         self._pi.write(self._PIN_CS, 1)
         self._pi.write(self._PIN_CS, 0)
-
+        #self.clock()
     # 2. Start clock
         self._pi.write(self._PIN_CLK, 0)
-
+        
     # 3. Input MUX address
         cmd = [1, 1, channel & 1, (channel & 2) >> 1, (channel & 4) >> 2]
         #print("Address word:" + str(cmd))
@@ -59,6 +59,9 @@ class SimpleADC:
 
     # 5. reset
         self._pi.write(self._PIN_CS, 1)
+        self._pi.write(self._PIN_DI,0)
+        self.clock()
+        self.clock()
         self.clock()
 
         return ad    
