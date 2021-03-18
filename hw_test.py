@@ -36,7 +36,9 @@ class HWBoard(threading.Thread):
         
         self._adc_commands = []
         
-        self._adc_active_channels = {16,17}
+        self._adc_active_channels = {16,17,18,19,20,21,22,23}
+        
+        self._adc_map = [16,17,20,19,18,21,22,23]
         
         for i in range(8):
             cmd = [1, 1, i & 1, (i & 2) >> 1, (i & 4) >> 2]
@@ -147,11 +149,12 @@ class HWBoard(threading.Thread):
         #only read ADC for current subscribers since the read is costly
         read_time = time.time()
         #for i in self._sub
-        for i in self._adc_active_channels:
+        for adc in self._adc_active_channels:
+            i = self._adc_map[adc-16]
             new_adc = self.getADC(i-16)
             #print("adc " + str(i) + " = " + str(new_adc[i]))
             if abs(new_adc - self._adc_value[i-16]) > sensitivity:
-                event = (self, i, new_adc, read_time)
+                event = (self, adc, new_adc, read_time)
                 msgQueue.put(event)
                 self._adc_value[i-16] = new_adc
                 

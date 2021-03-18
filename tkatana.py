@@ -38,8 +38,8 @@ editors = {}
 
 customFont = tkFont.Font(family="Helvetica", size=7)
 
-adc_knob_count = 5
-adc_exp_pedal = 6
+adc_knob_count = 6
+adc_exp_pedal = 7
 
 class HWBoard(threading.Thread):
     def __init__ (self, clock=21, mosi=20, miso=19, ce0=16, ce1=5, latch=26, reads_per_second=90):
@@ -66,6 +66,8 @@ class HWBoard(threading.Thread):
         self._blink_last = time.time()
         self._blink_period = 1
         self._blink_fraction = [1]*8*self._chips
+        
+        self._adc_map = [16,17,20,19,18,21,22,23]
         
         self._adc_commands = []
         
@@ -178,12 +180,12 @@ class HWBoard(threading.Thread):
         #only read ADC for current subscribers since the read is costly
         read_time = time.time()
         #for i in self._sub
-        for i in self._adc_active_channels:
-            #print("getting value for adc " + str(i))
+        for adc in self._adc_active_channels:
+            i = self._adc_map[adc-16]
             new_adc = self.getADC(i-16)
             #print("adc " + str(i) + " = " + str(new_adc[i]))
             if abs(new_adc - self._adc_value[i-16]) > sensitivity:
-                event = (self, i, new_adc, read_time)
+                event = (self, adc, new_adc, read_time)
                 msgQueue.put(event)
                 self._adc_value[i-16] = new_adc
                 
@@ -305,16 +307,18 @@ class EffectPanel:
         if self.effectName in self.effectsSettings:
             #print(str(self.effectsSettings[self.effectName]))
             key = self.base_title + "." + self.effectName
-
+            for e in editors:
+                editors[e][0].hide()
+                    
             if key in editors:
                 editors[key][0].read()
-                self.app.subscribe(range(16,21), editors[key][0].knob_moved)
+                self.app.subscribe(range(16,16+adc_knob_count), editors[key][0].knob_moved)
                 editors[key][0].show()
             else:
                 frm = tk.Toplevel(root, width=480, height=320)
                 editors[key] = (EffectEditor(frm, self.katana, self.app, self.effectName, self.effectsSettings[self.effectName]), frm)
                 editors[key][0].read()
-                self.app.subscribe(range(16,21), editors[key][0].knob_moved)
+                self.app.subscribe(range(16,16+adc_knob_count), editors[key][0].knob_moved)
                 centerTK.center(root, frm)
                 
     def write(self, *args):
@@ -557,9 +561,24 @@ class EQToggle(ToggleButton):
         if self.eq_type.get() == 0:
             self.peq_frame.deiconify()
             self.peq_frame.attributes("-topmost", True)
+            centerTK.center(root, self.peq_frame)
         else:
             self.geq_frame.deiconify()
             self.geq_frame.attributes("-topmost", True)
+            centerTK.center(root, self.geq_frame)
+            
+    def stopEditing(self):
+        if self.peq_frame.state() == 'normal':
+            self.peq_frame.withdraw()
+        if self.geq_frame.state() == 'normal':
+            self.geq_frame.withdraw()
+            
+    def isEditing(self):
+        if self.peq_frame.state() == 'normal':
+            return True
+        if self.geq_frame.state() == 'normal':
+            return True
+        return False
         
     def writeEQ(self):
         print("Write EQ")
@@ -713,6 +732,7 @@ class EffectEditor:
         level = msg[1]
         tick = msg[2]
         index = pin - 16
+        print("index = " + str(index))
         if index >= adc_knob_count or index >= len(self.settings):
             return
         #map the value to the setting's range
@@ -721,7 +741,10 @@ class EffectEditor:
         var = self.trace[index][1]
         low = float(setting[3])
         hi = float(setting[4])
+
         newVal = low + frac*(hi-low)
+        if hi - low == 1:
+            newVal = math.floor(newVal+0.5)
         print("knob " + str(index) + " adjusted, value = " + str(newVal))
         var.set(int(newVal))
     
@@ -734,13 +757,16 @@ class EffectEditor:
             
     def hide(self):
         print("Closing")
-        self.app.unsubscribe(range(16,21), self.knob_moved)
+        self.app.unsubscribe(range(16,16+adc_knob_count), self.knob_moved)
         self.parent.withdraw()
         #self.parent.destroy()
         
     def show(self):
         print("Showing")
         self.parent.deiconify()
+        
+    def isShowing(self):
+        return self.parent.state() == 'normal'
         
     def stateChanged(self, *args):
         #print(str(args))
@@ -1144,13 +1170,18 @@ class KatanaApp:
             self.hwButtonPressTime[btn] = read_time
             return
         
-        HOLD_TIME = 1.5
+        HOLD_TIME = 1
+        
+        LONG_HOLD_TIME = 3.0
         
         hold = False
         
-        #print("Elapsed time: " + str(elapsed))
+        longHold = False
         
-        if elapsed > HOLD_TIME:
+        #print("Elapsed time: " + str(elapsed))
+        if elapsed > LONG_HOLD_TIME:
+            longHold = True
+        elif elapsed > HOLD_TIME:
             hold = True
             #print("Detected HOLD")
         
@@ -1159,13 +1190,23 @@ class KatanaApp:
         #bigMessage("Button " + str(btn), 2)
         print("Button: " + str(btn) + " = " + str(val))
         if btn < 5:
-            if hold:
+            
+            for e in editors:
+                if editors[e][0].isShowing():
+                    editors[e][0].hide()
+                    return
+            
+            if longHold:
                 clr = self.effects[btn].color.get()
                 if clr == 2:
                     clr = 0
                 else:
                     clr = clr + 1
                 self.effects[btn].color.set(clr)
+            elif hold:
+                if self.eq.isEditing():
+                    self.eq.stopEditing()
+                self.effects[btn].edit()
             else:                
                 if self.effects[btn].toggle.get() == 1:
                     self.effects[btn].toggle.set(0)
@@ -1193,7 +1234,11 @@ class KatanaApp:
             else:
                 self.mute.toggle.set(1)
         elif btn == EQ_HW_BUTTON:
-            if self.eq.toggle.get() == 1:
+            if self.eq.isEditing():
+                self.eq.stopEditing()
+            if hold:
+                self.eq.editEQ()
+            elif self.eq.toggle.get() == 1:
                 self.eq.toggle.set(0)
             else:
                 self.eq.toggle.set(1)            
