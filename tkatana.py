@@ -539,10 +539,10 @@ class EQToggle(ToggleButton):
         #self.toggle_button.grid(row=2,column=0,columnspan=3)
         
         self.peq_frame = tk.Toplevel(root, width=480, height=320)
-        self.peq = EQEditor(self.katana, "P-EQ", ParametricEQ, ChParametricEQ, self.peq_frame)
+        self.peq = EQEditor(self.katana, app, "P-EQ", ParametricEQ, ChParametricEQ, self.peq_frame)
 
         self.geq_frame = tk.Toplevel(root, width=480, height=320)
-        self.geq = EQEditor(self.katana, "G-EQ", GraphicEQ, ChGraphicEQ, self.geq_frame)
+        self.geq = EQEditor(self.katana, app, "G-EQ", GraphicEQ, ChGraphicEQ, self.geq_frame)
         
         self.geq_frame.withdraw()
         self.peq_frame.withdraw()
@@ -562,16 +562,20 @@ class EQToggle(ToggleButton):
             self.peq_frame.deiconify()
             self.peq_frame.attributes("-topmost", True)
             centerTK.center(root, self.peq_frame)
+            self.app.subscribe(range(16,16+adc_knob_count), self.peq.knob_moved)
         else:
             self.geq_frame.deiconify()
             self.geq_frame.attributes("-topmost", True)
             centerTK.center(root, self.geq_frame)
-            
+            self.app.subscribe(range(16,16+adc_knob_count), self.geq.knob_moved)            
+
     def stopEditing(self):
         if self.peq_frame.state() == 'normal':
             self.peq_frame.withdraw()
+            self.app.unsubscribe(range(16,16+adc_knob_count), self.peq.knob_moved)
         if self.geq_frame.state() == 'normal':
             self.geq_frame.withdraw()
+            self.app.unsubscribe(range(16,16+adc_knob_count), self.geq.knob_moved)
             
     def isEditing(self):
         if self.peq_frame.state() == 'normal':
@@ -602,15 +606,22 @@ class EQToggle(ToggleButton):
         self.eq_type_trace = self.eq_type.trace('w', self.selectEQ)
         
 class EQEditor:
-    def __init__(self, katana, title, levelInfo, chLevelInfo, parent):
+    def __init__(self, katana, app, title, levelInfo, chLevelInfo, parent):
         
         self.katana = katana
+        
+        self.app = app
 
         self.title_frame = tk.LabelFrame(parent, text=title, padx=10, pady=5)
         
         self.parent = parent
 
         self.levels = []
+ 
+        #there are more parameters to edit than knobs, so let the last knob select
+        #  between which bank the other knobs edit
+        self.knob_offset = 0
+        
         col = 0
         maxCol = 6
         i = 0
@@ -627,7 +638,7 @@ class EQEditor:
             label.grid(row=(row+1),column=col,columnspan=columnspan)
             col = col + 1
             trace_level = l.trace('w', self.stateChanged)
-            self.levels.append([l,slider,trace_level,chLevelInfo[level][4],levelInfo[level][0], levelInfo[level][1], chLevelInfo[level][4]])
+            self.levels.append([l,slider,trace_level,chLevelInfo[level][4],levelInfo[level][0], levelInfo[level][1], chLevelInfo[level][4], levelInfo[level][2], levelInfo[level][3]])
             
         self.title_frame.grid(row=0,column=0)
             
@@ -661,10 +672,12 @@ class EQEditor:
     def hide(self):
         print("Close")
         self.parent.withdraw()
+        self.app.unsubscribe(range(16,16+adc_knob_count), self.knob_moved)
         
     def show(self):
         print("Showing")
         self.parent.deiconify()
+        self.app.subscribe(range(16,16+adc_knob_count), self.knob_moved)
             
     def stateChanged(self, *args):
         print("Eq state changed")
@@ -687,7 +700,32 @@ class EQEditor:
             level[0].set(val - level[4])
             level[2] = level[0].trace('w', self.stateChanged)
             
-
+    def knob_moved(self, msg):
+        pin = msg[0]
+        level = msg[1]
+        tick = msg[2]
+        
+        #if the last knob moves set the knob offset
+        if pin == 16 + adc_knob_count:
+            if level > 127:
+                self.knob_offset = 5
+            else:
+                self.knob_offset = 0
+            return
+                
+        index = pin - 16 + self.knob_offset
+        print("index = " + str(index))
+        if index >= adc_knob_count or index >= len(self.levels):
+            return
+        #map the value to the setting's range
+        frac = float(level)/255.0
+        setting = self.levels[index]
+        var = setting[0]
+        low = float(setting[7])
+        hi = float(setting[8])
+        newVal = low + frac*(hi-low)
+        print("knob " + str(index) + " adjusted, value = " + str(newVal))
+        var.set(int(newVal))
 
 class EffectEditor:
     def __init__(self, parent, katana, app, title, settings):
