@@ -46,6 +46,12 @@ class HWBoard(threading.Thread):
             
         self.queue = queue.Queue()
         
+        self.filter_constant = [0.6]*self._adc_channels
+        self.filter_constant[6] = 0.9 #let expression pedal have higher sensitivity
+        self.filter_constant[7] = 0.0 #disable this pin
+        
+        
+        
     def processOutgoing(self):
         """Handle all messages currently in the queue, if any."""
         while self.queue.qsize(  ):
@@ -145,19 +151,23 @@ class HWBoard(threading.Thread):
             
     def readAnalog(self, msgQueue):
         #with self._lock:    
-        sensitivity = 2
+        sensitivity = 1
         #only read ADC for current subscribers since the read is costly
         read_time = time.time()
         #for i in self._sub
         for adc in self._adc_active_channels:
             i = self._adc_map[adc-16]
             new_adc = self.getADC(i-16)
+            
+            new_adc = int(0.5+self.filter_constant[i-16]*new_adc + (1.0-self.filter_constant[i-16])*self._adc_value[i-16])
+            
             #print("adc " + str(i) + " = " + str(new_adc[i]))
             if abs(new_adc - self._adc_value[i-16]) > sensitivity:
                 event = (self, adc, new_adc, read_time)
                 msgQueue.put(event)
-                self._adc_value[i-16] = new_adc
                 
+            self._adc_value[i-16] = new_adc
+            
     # read SPI data from ADC8038
     def getADC(self, channel):
     # 1. CS LOW.

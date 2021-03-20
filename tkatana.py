@@ -23,6 +23,12 @@ root = tk.Tk()
 
 root.attributes('-zoomed',True)
 
+logging = False
+
+def log(msg):
+    if logging:
+        print(msg)
+
 bh = 42
 bw = 56
 
@@ -39,7 +45,7 @@ editors = {}
 customFont = tkFont.Font(family="Helvetica", size=7)
 
 adc_knob_count = 6
-adc_exp_pedal = 7
+adc_exp_pedal = 22
 
 class HWBoard(threading.Thread):
     def __init__ (self, clock=21, mosi=20, miso=19, ce0=16, ce1=5, latch=26, reads_per_second=90):
@@ -61,7 +67,7 @@ class HWBoard(threading.Thread):
         self._data_in = [0]*self._chips
         
         self._adc_channels = 8
-        self._adc_value = [0]*self._adc_channels
+        self._adc_value = [-1]*self._adc_channels
         
         self._blink_last = time.time()
         self._blink_period = 1
@@ -72,6 +78,10 @@ class HWBoard(threading.Thread):
         self._adc_commands = []
         
         self._adc_active_channels = {}
+        
+        self.filter_constant = [0.6]*self._adc_channels
+        self.filter_constant[6] = 0.75 #let expression pedal have higher sensitivity
+        self.filter_constant[7] = 0.0 #disable this pin
         
         for i in range(8):
             cmd = [1, 1, i & 1, (i & 2) >> 1, (i & 4) >> 2]
@@ -92,8 +102,8 @@ class HWBoard(threading.Thread):
                     # Check contents of message and do whatever is needed.
                     pin = msg[0]
                     val = msg[1]
-                    print("process outgoing")
-                    print("pin " + str(pin) + " value = " + str(val))
+                    log("process outgoing")
+                    log("pin " + str(pin) + " value = " + str(val))
                     if pin > 7:
                         self._data_out[1] = self.set_bit(self._data_out[1], pin - 8, val)
                     else:
@@ -151,7 +161,7 @@ class HWBoard(threading.Thread):
             inval = self._pi.read(self._miso)
             self._pi.write(self._mosi, outval)
             self._data_in[math.floor(i/8)] |= (inval << i%8)
-            #print("bit " + str(i) + " = " + str(inval))
+            #log("bit " + str(i) + " = " + str(inval))
             self._pi.gpio_trigger(self._clock, 1, 1)
         
     # 4. Output latch
@@ -173,21 +183,28 @@ class HWBoard(threading.Thread):
             
             self._last_data[0] = self._data_in[0]
             self._last_data[1] = self._data_in[1]
-            
+    
     def readAnalog(self, msgQueue):
         #with self._lock:    
-        sensitivity = 2
+        sensitivity = 1
         #only read ADC for current subscribers since the read is costly
         read_time = time.time()
         #for i in self._sub
         for adc in self._adc_active_channels:
             i = self._adc_map[adc-16]
             new_adc = self.getADC(i-16)
-            #print("adc " + str(i) + " = " + str(new_adc[i]))
+            
+            if self._adc_value[i-16] < 0:
+                self._adc_value[i-16] = new_adc
+            else:
+                new_adc = int(0.5+self.filter_constant[i-16]*new_adc + (1.0-self.filter_constant[i-16])*self._adc_value[i-16])
+            
+            #log("adc " + str(i) + " = " + str(new_adc[i]))
             if abs(new_adc - self._adc_value[i-16]) > sensitivity:
                 event = (self, adc, new_adc, read_time)
                 msgQueue.put(event)
-                self._adc_value[i-16] = new_adc
+                
+            self._adc_value[i-16] = new_adc
                 
     # read SPI data from ADC8038
     def getADC(self, channel):
@@ -201,7 +218,7 @@ class HWBoard(threading.Thread):
         
     # 3. Input MUX address
         cmd = self._adc_commands[channel]
-        #print("Address word:" + str(cmd))
+        #log("Address word:" + str(cmd))
         for i in cmd: # start bit + mux assignment
             if (i == 1):
                 self._pi.write(self._mosi,1)
@@ -226,7 +243,7 @@ class HWBoard(threading.Thread):
         return ad                    
         
 def destroyObj(obj):
-    #print("Destroy object")
+    #log("Destroy object")
     obj.destroy()
         
 def bigMessage(text, seconds):
@@ -302,10 +319,10 @@ class EffectPanel:
 
             
     def edit(self, *args):
-        print("Editing " + self.base_title)
-        print(self.effectName)
+        log("Editing " + self.base_title)
+        log(self.effectName)
         if self.effectName in self.effectsSettings:
-            #print(str(self.effectsSettings[self.effectName]))
+            #log(str(self.effectsSettings[self.effectName]))
             key = self.base_title + "." + self.effectName
             for e in editors:
                 editors[e][0].hide()
@@ -324,21 +341,21 @@ class EffectPanel:
     def write(self, *args):
         d = self.katana.query_sysex_data(CURRENT_PRESET_ADDR, CURRENT_PRESET_LEN)
         ch = d[1][0][1]
-        print("Write to channel " + str(ch))
-        print("Writing " + self.base_title)
-        print(self.effectName)
+        log("Write to channel " + str(ch))
+        log("Writing " + self.base_title)
+        log(self.effectName)
         if self.effectName in self.effectsSettings:
             for setting in self.effectsSettings[self.effectName]:
                 addr = setting[5]
                 sz = setting[6]
-                #print(setting[0] + "->" + str(addr))
+                #log(setting[0] + "->" + str(addr))
                 addrNew = channelAddress(addr, ch)
                 tmpVal = self.katana.query_sysex_int(addr, sz)
                 curVal = self.katana.query_sysex_int(addrNew, sz)
-                #print("Writing " + str(tmpVal) + " over " + str(curVal))
+                #log("Writing " + str(tmpVal) + " over " + str(curVal))
                 if not tmpVal == curVal:
-                    #print(str(setting))
-                    #print("Writing " + str(tmpVal) + " over " + str(curVal))
+                    #log(str(setting))
+                    #log("Writing " + str(tmpVal) + " over " + str(curVal))
                     self.katana.send_sysex_int(addrNew, tmpVal, sz)
                     
         tgl = self.toggle.get()
@@ -353,19 +370,19 @@ class EffectPanel:
         
         self.katana.send_sysex_data(ch_clr_addr, (self.color.get(),))
         
-        print("Assigning effect " + str(self.effectIndex) + " to color " + str(clr))
+        log("Assigning effect " + str(self.effectIndex) + " to color " + str(clr))
 
         self.katana.assign_effect(ch_assign_clr_addr, clr, self.effectIndex)
 
         self.katana.send_sysex_data(channelAddress(self.effect_addr, ch), (self.effectIndex,))
         
         amp = self.katana.query_sysex_byte(QUERY_AMP)
-        print("Writing amp " + str(amp) + " to patch")
+        log("Writing amp " + str(amp) + " to patch")
         self.katana.send_sysex_data(channelAddress(QUERY_AMP,ch),(amp,))
         
     def nextEffect(self):
-        print(str(self.color.get()))
-        print("Selecting next effect for " + self.colors[self.color.get()] + ": " + self.label.get())
+        log(str(self.color.get()))
+        log("Selecting next effect for " + self.colors[self.color.get()] + ": " + self.label.get())
         val = next(self.effectCycle[self.color.get()])
         if self.katana is None:
             return
@@ -381,9 +398,9 @@ class EffectPanel:
         bigMessage(self.colors[self.color.get()] + ": " + self.effectName, 1.5)
         
     def levelChanged(self, *args):
-        print("Level changed")
+        log("Level changed")
         #lvl = self.level_slider.get()
-        #print(self.label.get() + " level changed to " + str(lvl))
+        #log(self.label.get() + " level changed to " + str(lvl))
         #self.katana.send_sysex_data(self.level_addr[0], (lvl,))
         
     def toggleState(self, *args):
@@ -397,10 +414,10 @@ class EffectPanel:
     def readEffect(self):
         d = self.katana.query_sysex_data(CURRENT_PRESET_ADDR, CURRENT_PRESET_LEN)
         ch = d[1][0][1]
-        print("Read from channel " + str(ch))
-        print("Color selected is " + str(self.color.get()) + " should be " + str(self.katana.query_sysex_byte(self.color_addr)))
+        log("Read from channel " + str(ch))
+        log("Color selected is " + str(self.color.get()) + " should be " + str(self.katana.query_sysex_byte(self.color_addr)))
         res = self.katana.query_sysex_byte(self.color_assign_addr, self.color.get())
-        print("Setting " + self.label.get() + " effect state to " + str(self.effectMap[res]))
+        log("Setting " + self.label.get() + " effect state to " + str(self.effectMap[res]))
         val = next(self.effectCycle[self.color.get()])
         while val[0] != res:
             val = next(self.effectCycle[self.color.get()])
@@ -412,7 +429,7 @@ class EffectPanel:
         
     def readToggle(self):
         res = self.katana.query_sysex_byte(self.toggle_addr)
-        #print("Setting " + self.label.get() + " toggle state to " + str(res))
+        #log("Setting " + self.label.get() + " toggle state to " + str(res))
         self.toggle.trace_vdelete('w', self.toggle_trace)
         self.toggle.set(res)
         self.toggle_trace = self.toggle.trace('w', self.toggleState)
@@ -420,7 +437,7 @@ class EffectPanel:
         
     def readColor(self):
         res = self.katana.query_sysex_byte(self.color_addr)
-        #print("Setting " + self.label.get() + " color state to " + str(self.colors[res]))
+        #log("Setting " + self.label.get() + " color state to " + str(self.colors[res]))
         self.color.trace_vdelete('w', self.color_trace)
         self.color.set(res)
         self.color_trace = self.color.trace('w', self.changeColor)
@@ -428,7 +445,7 @@ class EffectPanel:
     def read(self):
         if self.katana is None:
             return
-        print("Reading state for " + self.label.get())
+        log("Reading state for " + self.label.get())
         self.readColor()
         self.readEffect()
         self.readToggle()
@@ -462,7 +479,7 @@ class ToggleButton:
         self.hw_button = hw_button
         
     def stateChanged(self, *args):
-        print(self.text.get() + " changed to " + str(self.toggle.get()))
+        log(self.text.get() + " changed to " + str(self.toggle.get()))
         self.app.sendOutput(self.hw_button, self.toggle.get())
         #state = ": off"
         #if self.toggle.get():
@@ -492,7 +509,7 @@ class RingSelector(MomentaryButton):
         self.currentSelection = newVal
         self.text.set(self.base_title + ": " + str(newVal[1]))
         self.katana.send_sysex_data(self.addr, (newVal[0],))
-        print(str(newVal))
+        log(str(newVal))
         bigMessage(str(newVal[1]), 1.5)
         
     def get(self):
@@ -500,11 +517,11 @@ class RingSelector(MomentaryButton):
         
     def setSelection(self, selection):
         val = next(self.selectionPool)
-        #print("Selection: " + str(selection))
+        #log("Selection: " + str(selection))
         while val != selection:
             val = next(self.selectionPool)
-            #print(str(val))
-        print("Selected " + str(val))
+            #log(str(val))
+        log("Selected " + str(val))
         self.text.set(self.base_title + ": " + selection[1])
         
 class EffectSelector(MomentaryButton):
@@ -514,7 +531,7 @@ class EffectSelector(MomentaryButton):
         self.effectPanels = effectPanels
         
     def nextItem(self):
-        print(self.text.get())
+        log(self.text.get())
         activePanel = None
         for panel in self.effectPanels:
             if panel.toggle.get() == 1:
@@ -550,22 +567,24 @@ class EQToggle(ToggleButton):
         self.eq_type_trace = self.eq_type.trace('w', self.selectEQ)
         
     def selectEQ(self, *args):
-        print("EQ state changed: " + str(args))
+        log("EQ state changed: " + str(args))
         self.eq_type.trace_vdelete('w', self.eq_type_trace)
         val = self.eq_type.get()
         self.katana.send_sysex_data(CHANNEL_EQ_TYPE, (val,))
         self.eq_type_trace = self.eq_type.trace('w', self.selectEQ)
         
     def editEQ(self):
-        print("Edit EQ")
+        log("Edit EQ")
         if self.eq_type.get() == 0:
             self.peq_frame.deiconify()
             self.peq_frame.attributes("-topmost", True)
+            self.peq.setActiveColors()
             centerTK.center(root, self.peq_frame)
             self.app.subscribe(range(16,16+adc_knob_count), self.peq.knob_moved)
         else:
             self.geq_frame.deiconify()
             self.geq_frame.attributes("-topmost", True)
+            self.geq.setActiveColors()
             centerTK.center(root, self.geq_frame)
             self.app.subscribe(range(16,16+adc_knob_count), self.geq.knob_moved)            
 
@@ -585,10 +604,10 @@ class EQToggle(ToggleButton):
         return False
         
     def writeEQ(self):
-        print("Write EQ")
+        log("Write EQ")
         d = self.katana.query_sysex_data(CURRENT_PRESET_ADDR, CURRENT_PRESET_LEN)
         ch = d[1][0][1]
-        print("Writing EQ data to channel " + str(ch))
+        log("Writing EQ data to channel " + str(ch))
         self.katana.send_sysex_data(channelAddress(CHANNEL_EQ_TYPE, ch), (self.eq_type.get(),))
         self.katana.send_sysex_data(channelAddress(CHANNEL_EQ_SW, ch), (self.toggle.get(),))
         if self.eq_type.get() == 0:
@@ -600,7 +619,7 @@ class EQToggle(ToggleButton):
         self.peq.read()
         self.geq.read()
         eq_type = self.katana.query_sysex_byte(CHANNEL_EQ_TYPE)
-        print("EQ Type is " + str(eq_type))
+        log("EQ Type is " + str(eq_type))
         self.eq_type.trace_vdelete('w', self.eq_type_trace)
         self.eq_type.set(eq_type)
         self.eq_type_trace = self.eq_type.trace('w', self.selectEQ)
@@ -651,7 +670,7 @@ class EQEditor:
         self.activeEditor = None
         
     def reset(self):
-        print("Reset")
+        log("Reset")
         for level in self.levels:
             level[1].set(level[5])
             #self.katana.send_sysex_data(addr, (level[5],))
@@ -659,63 +678,74 @@ class EQEditor:
     def write(self):
         d = self.katana.query_sysex_data(CURRENT_PRESET_ADDR, CURRENT_PRESET_LEN)
         ch = d[1][0][1]
-        print("Writing EQ data to channel " + str(ch))
+        log("Writing EQ data to channel " + str(ch))
         for level in self.levels:
-            #print("Writing value = " + str(level[0].get()+level[4]))
+            #log("Writing value = " + str(level[0].get()+level[4]))
             self.katana.send_sysex_data(channelAddress(level[6], ch), (level[0].get()+level[4],))
             #val = self.katana.query_sysex_byte(channelAddress(level[6], ch))
-            #print("Read channel value = " + str(val))
+            #log("Read channel value = " + str(val))
             #val = self.katana.query_sysex_byte(level[6])
-            #print("Read immediate value = " + str(val))
+            #log("Read immediate value = " + str(val))
             #level[1].set(level[5])
             
     def hide(self):
-        print("Close")
+        log("Close")
         self.parent.withdraw()
         self.app.unsubscribe(range(16,16+adc_knob_count), self.knob_moved)
         
     def show(self):
-        print("Showing")
+        log("Showing")
         self.parent.deiconify()
         self.app.subscribe(range(16,16+adc_knob_count), self.knob_moved)
             
     def stateChanged(self, *args):
-        print("Eq state changed")
+        log("Eq state changed")
         for level in self.levels:
             if level[0]._name == args[0]:
                 addr = level[3]
-                #print(str(addr))
+                #log(str(addr))
                 val = level[0].get()
-                #print("Updating " + level[0]._name + " to value " + str(val))
+                #log("Updating " + level[0]._name + " to value " + str(val))
                 self.katana.send_sysex_data(addr, (val+level[4],))
         
     def read(self):
-        print("Reading Eq state")
+        log("Reading Eq state")
         for level in self.levels:
             addr = level[3]
-            #print(str(addr))
+            #log(str(addr))
             val = self.katana.query_sysex_byte(addr)
-            #print("Updating " + level[0]._name + " to value " + str(val))
+            #log("Updating " + level[0]._name + " to value " + str(val))
             level[0].trace_vdelete('w', level[2])
             level[0].set(val - level[4])
             level[2] = level[0].trace('w', self.stateChanged)
             
+    def setActiveColors(self):
+        start = self.knob_offset
+        end = start + adc_knob_count - 1
+        for i in range(len(self.levels)):
+            if i >= start and i < end:
+                self.levels[i][1].configure(fg='red')
+            else:
+                self.levels[i][1].configure(fg='black')
+                
     def knob_moved(self, msg):
         pin = msg[0]
         level = msg[1]
         tick = msg[2]
         
         #if the last knob moves set the knob offset
-        if pin == 16 + adc_knob_count:
-            if level > 127:
-                self.knob_offset = 5
-            else:
-                self.knob_offset = 0
+        if pin == 16 + adc_knob_count - 1:
+            #if level > 127:
+            #    self.knob_offset = 5
+            #else:
+            #    self.knob_offset = 0
+            self.knob_offset = int(level / 30)    
+            self.setActiveColors()
             return
                 
         index = pin - 16 + self.knob_offset
-        print("index = " + str(index))
-        if index >= adc_knob_count or index >= len(self.levels):
+        log("index = " + str(index))
+        if index >= len(self.levels):
             return
         #map the value to the setting's range
         frac = float(level)/255.0
@@ -724,8 +754,9 @@ class EQEditor:
         low = float(setting[7])
         hi = float(setting[8])
         newVal = low + frac*(hi-low)
-        print("knob " + str(index) + " adjusted, value = " + str(newVal))
+        log("knob " + str(index) + " adjusted, value = " + str(newVal))
         var.set(int(newVal))
+        setting[1].configure(fg='red')
 
 class EffectEditor:
     def __init__(self, parent, katana, app, title, settings):
@@ -742,10 +773,14 @@ class EffectEditor:
         self.settings = settings.copy()
         col = 0
         
+        #there are more parameters to edit than knobs, so let the last knob select
+        #  between which bank the other knobs edit
+        self.knob_offset = 0
+        self.sliders = []
         self.trace = {}
         #('MODE', 0, 1, 0, 1, (0x60, 0x00, 0x01, 0x02))
         for setting in self.settings:
-            #print(str(setting))
+            #log(str(setting))
             l = tk.IntVar(name=title + "." + setting[0] + ".level",  value=setting[2])
             o = "vertical"
             row = 0
@@ -756,6 +791,7 @@ class EffectEditor:
             label.grid(row=(row+1),column=col,columnspan=columnspan)
             self.trace[col] = (l.trace('w', self.stateChanged), l)
             col = col + 1
+            self.sliders.append(slider)
             
         self.reset = tk.Button(self.title_frame, text="Reset", command=self.reset)
         self.reset.grid(row = row + 2, column = 0)
@@ -765,13 +801,40 @@ class EffectEditor:
             
         self.title_frame.grid(row=0,column=0)
         
+        self.setActiveColors()
+        
+    def setActiveColors(self):
+        start = self.knob_offset
+        if len(self.sliders) <= adc_knob_count:
+            for slider in self.sliders:
+                slider.configure(fg='black')
+            return
+        end = start + adc_knob_count - 1
+        for i in range(len(self.sliders)):
+            if i >= start and i < end:
+                self.sliders[i].configure(fg='red')
+            else:
+                self.sliders[i].configure(fg='black')        
+        
     def knob_moved(self, msg):
         pin = msg[0]
         level = msg[1]
         tick = msg[2]
-        index = pin - 16
+        print("knob " + str(pin) + " moved")
+        if len(self.sliders) > adc_knob_count:
+            #if the last knob moves set the knob offset
+            if pin == 16 + adc_knob_count - 1:
+                #if level > 127:
+                #    self.knob_offset = 5
+                #else:
+                #    self.knob_offset = 0
+                self.knob_offset = int(level / 30)    
+                self.setActiveColors()
+                return        
+        
+        index = pin - 16 + self.knob_offset
         print("index = " + str(index))
-        if index >= adc_knob_count or index >= len(self.settings):
+        if index >= len(self.settings):
             return
         #map the value to the setting's range
         frac = float(level)/255.0
@@ -783,32 +846,32 @@ class EffectEditor:
         newVal = low + frac*(hi-low)
         if hi - low == 1:
             newVal = math.floor(newVal+0.5)
-        print("knob " + str(index) + " adjusted, value = " + str(newVal))
+        log("knob " + str(index) + " adjusted, value = " + str(newVal))
         var.set(int(newVal))
     
     def reset(self):
-        print("Reset")
+        log("Reset")
         for i in range(0, len(self.settings)):
             var = self.trace[i][1]
             setting = self.settings[i]
             var.set(setting[2])
             
     def hide(self):
-        print("Closing")
+        log("Closing")
         self.app.unsubscribe(range(16,16+adc_knob_count), self.knob_moved)
         self.parent.withdraw()
         #self.parent.destroy()
         
     def show(self):
-        print("Showing")
+        log("Showing")
         self.parent.deiconify()
         
     def isShowing(self):
         return self.parent.state() == 'normal'
         
     def stateChanged(self, *args):
-        #print(str(args))
-        #print(args[0] + " state changed")
+        #log(str(args))
+        #log(args[0] + " state changed")
         for i in range(0,len(self.settings)):
             var = self.trace[i][1]
             if var._name == args[0]:
@@ -816,9 +879,9 @@ class EffectEditor:
                 addr = setting[5]
                 sz = setting[6]
                 val = var.get() + setting[1]
-                #print(str(setting))
-                #print("val = " + str(val))
-                #print("sz = " + str(sz))
+                #log(str(setting))
+                #log("val = " + str(val))
+                #log("sz = " + str(sz))
                 self.katana.send_sysex_int(addr, val, sz)
                 break
 
@@ -826,13 +889,13 @@ class EffectEditor:
         i = 0
         d = self.katana.query_sysex_data(CURRENT_PRESET_ADDR, CURRENT_PRESET_LEN)
         ch = d[1][0][1]
-        print("Reading effect from channel " + str(ch))
+        log("Reading effect from channel " + str(ch))
         for setting in self.settings:
             addr = setting[5]
             sz = setting[6]
-            #print("Setting:" + str(setting))
+            #log("Setting:" + str(setting))
             #addrNew = (chOffset[0], chOffset[1], addr[2], addr[3])
-            #print(str(addr))
+            #log(str(addr))
             val = self.katana.query_sysex_int(addr, sz) - setting[1]
             var = self.trace[i][1]
             trace_id = self.trace[i][0]
@@ -869,15 +932,15 @@ class PedalEditor:
         self.pedal_option.trace('w', self.set_pedal_map)
         
     def hide(self):
-        print("Closing")
+        log("Closing")
         self.parent.withdraw()
         
     def show(self):
-        print("Showing")
+        log("Showing")
         self.parent.deiconify()
         
     def set_pedal_map(self,*args):
-        print("Setting pedal map to " + self.pedal_option.get())
+        log("Setting pedal map to " + self.pedal_option.get())
         
 class KatanaApp:
     def __init__ (self, master, queue, hw_board, endCommand):
@@ -925,7 +988,7 @@ class KatanaApp:
 
         ampShortList = []
         for i in AMP_LOOP_SHORT:
-            #print(AMP_MAP[i])
+            #log(AMP_MAP[i])
             ampShortList.append((i, AMP_MAP[i]))
             #ampNameList.append(AMP_MAP[i])
             
@@ -966,7 +1029,7 @@ class KatanaApp:
         self.selectedChannel = -1
         
         self.hwButtonPressTime = {}
-        for i in range(0,15):
+        for i in range(16):
             self.hwButtonPressTime[i] = 0
             
         PEDAL_WAH_OPTION = [(FX_WAH_PEDAL,0,100),(MOD_WAH_PEDAL,0,100), (FX_EVH_WAH_PEDAL,0,100), (MOD_EVH_WAH_PEDAL,0,100)]
@@ -986,11 +1049,13 @@ class KatanaApp:
 
         self.pedal_1_frame.withdraw()
         
-        self.subscribe(range(0,15), self.hardware_button)
+        self.subscribe(range(16), self.hardware_button)
+        
+        self.subscribe([adc_exp_pedal], self.pedal_change)
                 
         
     def editPedal1(self):
-        print("Edit pedal 1")
+        log("Edit pedal 1")
         self.pedal_1_editor.show()      
     
     def saveCurrentChannel(self):
@@ -1041,7 +1106,7 @@ class KatanaApp:
             json.dump(data, outfile, indent=4, sort_keys=True)
             
     def saveEQ(self, ch, data):
-        print("Saving EQ settings")
+        log("Saving EQ settings")
         #ParametricEQ = {'LOWCUT':(0, 0, 0, 17, (0x00, 0x00, 0x00, 0x13)),'L
         eqTypeAddr = channelAddress(CHANNEL_EQ_TYPE, ch)
         eqSwAddr = channelAddress(CHANNEL_EQ_SW, ch)
@@ -1054,22 +1119,22 @@ class KatanaApp:
         for setting in ChParametricEQ:
             chAddr = channelAddress(ChParametricEQ[setting][4], ch)
             val = self.katana.query_sysex_byte(chAddr)
-            print(str(setting) + " = " + str(val))
+            log(str(setting) + " = " + str(val))
             data['EQ'][ch]['PEQ'].append((setting, chAddr, val, 1))
         data['EQ'][ch]['GEQ'] = []
         for setting in ChGraphicEQ:
             chAddr = channelAddress(ChGraphicEQ[setting][4], ch)
             val = self.katana.query_sysex_byte(chAddr)
-            print(str(setting) + " = " + str(val))
+            log(str(setting) + " = " + str(val))
             data['EQ'][ch]['GEQ'].append((setting, chAddr, val, 1))
             
     def saveEffect(self, effectType, ch, data):
 #         FX1_ADCOMP.append(('SUSTAIN', 0, 50, 0, 100, (0x60, 0x00, 0x01, 0x17)))
         effectsSettings = self.effect_settings[effectType]
         data[effectType] = {}
-        print("Saving state for " + effectType)
+        log("Saving state for " + effectType)
         #for i in range(0,9):
-        print("Reading " + effectType + " from channel " + str(ch))
+        log("Reading " + effectType + " from channel " + str(ch))
         data[effectType][ch] = {}
         data[effectType][ch]['STATE'] = []
         toggle_addr = channelAddress(TOGGLE_MAP[effectType], ch)
@@ -1088,23 +1153,23 @@ class KatanaApp:
             data[effectType][ch]['STATE'].append((color_names[i], addr, clr_assignments[i], 1))
             color_effect_names.append(EFFECT_INDEX_TO_NAME[effectType][clr_assignments[i]])
         
-        print(str(color_effect_names))
+        log(str(color_effect_names))
         
         for effectName in color_effect_names:
-            print("Reading " + effectName)
+            log("Reading " + effectName)
             list = effectsSettings[effectName]
             data[effectType][ch][effectName] = []
             for setting in list:
-                #print("Reading " + str(setting))
+                #log("Reading " + str(setting))
                 chAddr = channelAddress(setting[5], ch)
                 val = self.katana.query_sysex_int(chAddr, setting[6])# - setting[1]
                 #if val > -1 and val < 128:
                 data[effectType][ch][effectName].append((setting[0], chAddr, val, setting[6]))
                 #else:
-                #    print("Failed to store value " + val + " for " + effectName + setting[0] + " = " + str(val))
+                #    log("Failed to store value " + val + " for " + effectName + setting[0] + " = " + str(val))
         
     def saveAmp(self, ch, data):
-        print("Saving Amp setting")
+        log("Saving Amp setting")
         #ParametricEQ = {'LOWCUT':(0, 0, 0, 17, (0x00, 0x00, 0x00, 0x13)),'L
         ampAddr = channelAddress(QUERY_AMP, ch)
         data['AMP'] = {}
@@ -1115,10 +1180,10 @@ class KatanaApp:
     def restoreFile(self):
         filename = fdialog.askopenfilename(initialdir = "/home/pi",title = "Select file",filetypes = (("json files","*.json"),("all files","*.*")))
         if filename is not None:
-            print(filename)
+            log(filename)
             with open(filename, 'r') as json_file:
                 data = json.load(json_file)
-                print("Restoring settings from file")
+                log("Restoring settings from file")
                 answer = messagebox.askyesnocancel("Question", "Load into current channel?")
                 if answer is None:
                     return
@@ -1130,13 +1195,13 @@ class KatanaApp:
                     self.restore(data)
                     
                 #self.katana.set_patch_name(1,'test')
-                print("Reading amp settings into UI")
+                log("Reading amp settings into UI")
             
             self.read()
         
     
     def restore(self, data, targetCh=-1):
-        print("Restoring data")
+        log("Restoring data")
         
         d = self.katana.query_sysex_data(CURRENT_PRESET_ADDR, CURRENT_PRESET_LEN)
         curr_ch = d[1][0][1]
@@ -1147,12 +1212,12 @@ class KatanaApp:
         for item in data:
             for ch in data[item]:
                 for group in data[item][ch]:
-                    print("Restoring " + group)
+                    log("Restoring " + group)
                     for setting in data[item][ch][group]:
                         addr = setting[1]
-                        print(str(setting))
+                        log(str(setting))
                         ich = int(ch)
-                        print(setting[0] + " -> " + str(setting[2]) + " @" + str(addr) + " for ch " + str(ich) + "/" + str(curr_ch))
+                        log(setting[0] + " -> " + str(setting[2]) + " @" + str(addr) + " for ch " + str(ich) + "/" + str(curr_ch))
                         tmpAddr = None
                         tmpCh = ich
                         if targetCh > -1:
@@ -1180,18 +1245,22 @@ class KatanaApp:
                             if tmpAddr is not None:
                                 self.katana.send_sysex_int(tmpAddr, val, 1)
 
-    def pedal_change(self, channel, value, read_time):
+    def pedal_change(self, msg):
+        channel = msg[0]
+        value = msg[1]
+        read_time = msg[2]
+        log("pedal value changed: " + str(value))
         if not channel in self.pedal_vars:
-            print(str(channel) + " not associated with pedal")
+            log(str(channel) + " not associated with pedal")
             return
         pedal_var = self.pedal_vars[channel]
-        #print(pedal_var.get() + " changed, raw value = " + str(value))
+        #log(pedal_var.get() + " changed, raw value = " + str(value))
         settings = self.pedal_options[pedal_var.get()] # a list of (address, min, max)
         for setting in settings:
             minVal = float(setting[1])
             maxVal = float(setting[2])
             mapVal = int(minVal + int(float(value) / 255.0 * maxVal))
-            #print("Setting value = " + str(mapVal))
+            #log("Setting value = " + str(mapVal))
             sz = 1
             if maxVal > 127:
                 sz = 2
@@ -1216,17 +1285,17 @@ class KatanaApp:
         
         longHold = False
         
-        #print("Elapsed time: " + str(elapsed))
+        #log("Elapsed time: " + str(elapsed))
         if elapsed > LONG_HOLD_TIME:
             longHold = True
         elif elapsed > HOLD_TIME:
             hold = True
-            #print("Detected HOLD")
+            #log("Detected HOLD")
         
         val = 1
         
         #bigMessage("Button " + str(btn), 2)
-        print("Button: " + str(btn) + " = " + str(val))
+        log("Button: " + str(btn) + " = " + str(val))
         if btn < 5:
             
             for e in editors:
@@ -1274,6 +1343,7 @@ class KatanaApp:
         elif btn == EQ_HW_BUTTON:
             if self.eq.isEditing():
                 self.eq.stopEditing()
+                return
             if hold:
                 self.eq.editEQ()
             elif self.eq.toggle.get() == 1:
@@ -1282,7 +1352,7 @@ class KatanaApp:
                 self.eq.toggle.set(1)            
         
     def readChannel(self):
-        print("Reading channel info")
+        log("Reading channel info")
         d = self.katana.query_sysex_data(CURRENT_PRESET_ADDR, CURRENT_PRESET_LEN)
         ch = d[1][0][1]
         abval = 0
@@ -1292,14 +1362,14 @@ class KatanaApp:
         self.ab.toggle.set(abval)
         self.sendOutput(AB_HW_BUTTON, abval)
         self.ab_trace = self.ab.toggle.trace('w', self.abStateChanged)
-        print("Channel is " + str(ch))
+        log("Channel is " + str(ch))
         chSel = -1
         if ch <= 4 and self.ab.toggle.get() == 0:
             chSel = ch
         elif ch > 4 and self.ab.toggle.get():
             chSel = ch - 4
         ChannelButton.channel.trace_vdelete('w', self.channel_trace)
-        print("Setting channel selected button" + str(chSel))
+        log("Setting channel selected button" + str(chSel))
         ChannelButton.channel.set(chSel)
         for i in range(0,5):
             self.sendOutput(i+5,0)
@@ -1320,11 +1390,11 @@ class KatanaApp:
                 self.channels[i-4].text.set("Ch." + str(i) + " " + names[i])        
         
     def readAmp(self):
-        print("Reading amp info")
+        log("Reading amp info")
         amp_selection = self.katana.query_amp()
-        print("Amp selection is " + str(amp_selection))
+        log("Amp selection is " + str(amp_selection))
         ampName = AMP_MAP[amp_selection]
-        print("Selecting " + ampName)
+        log("Selecting " + ampName)
         self.nextAmp.setSelection((amp_selection, ampName))
         
     def readEQ(self):
@@ -1357,9 +1427,9 @@ class KatanaApp:
             ChannelButton.channel.set(self.selectedChannel)
         
     def channelStateChanged(self, *args):
-        print("Channel state changed to " + str(ChannelButton.channel.get()))
+        log("Channel state changed to " + str(ChannelButton.channel.get()))
         ch = ChannelButton.channel.get()
-        print("Raw channel value =  " + str(ch))
+        log("Raw channel value =  " + str(ch))
         chSel = -1
         if ch >= 0:
             chSel = ch
@@ -1367,13 +1437,13 @@ class KatanaApp:
         for i in range(0,5):
             self.sendOutput(i+5,0)
         if chSel >= 0:
-            print(str(chSel+5) + " set to 1")
+            log(str(chSel+5) + " set to 1")
             self.sendOutput(chSel+5, 1)
             
-        print("chSel value = " + str(chSel))
+        log("chSel value = " + str(chSel))
         if ch == 0:
             ch = 4 #panel 0x04
-            #print("Selecting channel 4")
+            #log("Selecting channel 4")
             bigMessage("Panel", 2.5)
             self.katana.select_channel(ch)
             
@@ -1396,32 +1466,32 @@ class KatanaApp:
         self.readEQ()
         
     def eqStateChanged(self,*args):
-        print("Eq state changed")
+        log("Eq state changed")
         if self.eq.toggle.get():
-            print("Setting Eq on")
+            log("Setting Eq on")
             self.katana.send_sysex_data(CHANNEL_EQ_SW, (0x01,))
             self.sendOutput(13,1)
             bigMessage("Eq: On",1.5)
         else:
-            print("Setting Eq off")
+            log("Setting Eq off")
             self.katana.send_sysex_data(CHANNEL_EQ_SW, (0x00,))
             self.sendOutput(13,0)
             bigMessage("Eq: Off",1.5)
             
     def muteStateChanged(self, *args):
         if self.mute.toggle.get():
-            print("Muting")
+            log("Muting")
             bigMessage("Mute: On", 1.5)
             self.katana.mute()
         else:
-            print("Unmuting")
+            log("Unmuting")
             bigMessage("Mute: Off", 1.5)
             self.katana.unmute()
     
     def subscribe(self, pinRange, callback):
         update = False
         for pin in pinRange:
-            print("subscribing pin " + str(pin))
+            log("subscribing pin " + str(pin))
             if pin not in self.subscribers:
                 self.subscribers[pin] = []
                 if pin > 15:
@@ -1436,7 +1506,7 @@ class KatanaApp:
             
     def unsubscribe(self, pinRange, callback):
         for pin in pinRange:
-            print("unsubscribing pin " + str(pin))
+            log("unsubscribing pin " + str(pin))
             if pin in self.subscribers:
                 self.subscribers[pin].remove(callback)
                 if len(self.subscribers[pin]) == 0:
@@ -1450,7 +1520,7 @@ class KatanaApp:
     def clear_subscribers(self, pinRange):
         for pin in pinRange:
             if pin in self.subscribers:
-                print("unsubscribing pin " + str(pin))
+                log("unsubscribing pin " + str(pin))
                 self.subscribers[pin].clear()
                 self.subscribers.pop(pin, None)
         pins = set()
@@ -1468,8 +1538,8 @@ class KatanaApp:
                 msg = self.queue.get(0)
                 #hw_board = msg[0]
                 # Check contents of message and do whatever is needed.
-                print("process incoming")
-                print("pin " + str(msg[1]) + " value = " + str(msg[2]))
+                log("process incoming")
+                log("pin " + str(msg[1]) + " value = " + str(msg[2]))
                 pin = msg[1]
                 val = msg[2]
                 ticks = msg[3]
@@ -1529,8 +1599,8 @@ class ThreadedClient:
         self.gui.read()
         
     def event(self, msg):
-        print("Subscribed event triggered")
-        print(msg)
+        log("Subscribed event triggered")
+        log(msg)
 
     def periodicCall(self):
         """
@@ -1570,9 +1640,9 @@ class ThreadedClient:
             if delay > 0.0:
                 time.sleep(delay)
                 
-        print("Digital read:" + str(avgDigitalReadTime/nReads))
-        print("Analog read:" + str(avgAnalogReadTime/nReads))
-        print("Total time to read:" + str(avgReadTime/nReads))        
+        log("Digital read:" + str(avgDigitalReadTime/nReads))
+        log("Analog read:" + str(avgAnalogReadTime/nReads))
+        log("Total time to read:" + str(avgReadTime/nReads))        
         
         self.hw_board.stop()
 
@@ -1583,15 +1653,15 @@ class ThreadedClient:
         self.running = 0
         
     def close_window(self):
-        print( "Window closed")
+        log( "Window closed")
         self.endApplication()
 
 
 client = ThreadedClient(root)
 
-print("Ready")
+log("Ready")
 
-print(str(sys.argv))
+log(str(sys.argv))
 small = 0
 
 if len(sys.argv) > 1:
@@ -1600,11 +1670,11 @@ else:
     small = 0
 
 if small == 1:      
-    print("Rendering small UI") 
+    log("Rendering small UI") 
     default_font = tkFont.nametofont("TkDefaultFont")
     default_font.configure(size=10)
     scale_length = 64
 else:
-    print("Rendering large UI")
+    log("Rendering large UI")
 
 root.mainloop(  )

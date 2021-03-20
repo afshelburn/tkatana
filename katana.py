@@ -370,7 +370,7 @@ class Katana:
             print("timeout")
             print(str(msg))
             #print(str(self.data))
-            syslog.syslog( "Error: Timeout on cond wait" )
+            #syslog.syslog( "Error: Timeout on cond wait" )
 
         self.receive_cond.release()
 
@@ -493,7 +493,7 @@ class Katana:
             addr = (rq[0],rq[1],rq[2],rq[3])
             name = self.query_sysex_data(addr,0x10)[1][0]
             res = ''.join(map(chr, name)) 
-            print(res)
+            #print(res)
             #time.sleep(0.01)
             names.append(res)
         return names
@@ -506,7 +506,7 @@ class Katana:
             addr = (rq[0],rq[1],rq[2],rq[3])
             name = self.query_sysex_data(addr,0x10)[1][0]
             res = ''.join(map(chr, name)) 
-            print(res)
+            #print(res)
             #time.sleep(0.01)
             names.append(res)
         return names[ch]
