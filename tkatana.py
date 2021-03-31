@@ -23,11 +23,12 @@ root = tk.Tk()
 
 root.attributes('-zoomed',True)
 
-logging = False
+logging = True
 
-def log(msg):
+def log(msg, level=0):
     if logging:
-        print(msg)
+        if level > 0:
+            print(msg)
 
 bh = 42
 bw = 56
@@ -186,7 +187,7 @@ class HWBoard(threading.Thread):
     
     def readAnalog(self, msgQueue):
         #with self._lock:    
-        sensitivity = 1
+        sensitivity = 2
         #only read ADC for current subscribers since the read is costly
         read_time = time.time()
         #for i in self._sub
@@ -636,6 +637,7 @@ class EQEditor:
         self.parent = parent
 
         self.levels = []
+        self.params = []
  
         #there are more parameters to edit than knobs, so let the last knob select
         #  between which bank the other knobs edit
@@ -651,6 +653,7 @@ class EQEditor:
             row = 0 #int(i / maxCol)
             i = i + 1
             columnspan = 1
+            self.params.append(level)
             slider = Scale(self.title_frame, variable=l, from_=levelInfo[level][3], to=levelInfo[level][2], orient=o, length=100)
             slider.grid(row=row,column=col,columnspan=columnspan)
             label = Label(self.title_frame, text=level, anchor="center", padx=2, font=customFont)
@@ -697,6 +700,25 @@ class EQEditor:
         log("Showing")
         self.parent.deiconify()
         self.app.subscribe(range(16,16+adc_knob_count), self.knob_moved)
+        
+    def edit(self):
+        log("Edit")
+        self.read()
+        self.parent.deiconify()
+        self.parent.attributes("-topmost", True)
+        self.setActiveColors()
+        centerTK.center(root, self.parent)
+        self.app.subscribe(range(16,16+adc_knob_count), self.knob_moved)        
+        
+    def stopEditing(self):
+        if self.parent.state() == 'normal':
+            self.parent.withdraw()
+            self.app.unsubscribe(range(16,16+adc_knob_count), self.knob_moved)
+            
+    def isEditing(self):
+        if self.parent.state() == 'normal':
+            return True
+        return False        
             
     def stateChanged(self, *args):
         log("Eq state changed")
@@ -709,12 +731,12 @@ class EQEditor:
                 self.katana.send_sysex_data(addr, (val+level[4],))
         
     def read(self):
-        log("Reading Eq state")
+        log("Reading Eq state", 1)
         for level in self.levels:
             addr = level[3]
             #log(str(addr))
             val = self.katana.query_sysex_byte(addr)
-            #log("Updating " + level[0]._name + " to value " + str(val))
+            log("Updating " + level[0]._name + " to value " + str(val), 0)
             level[0].trace_vdelete('w', level[2])
             level[0].set(val - level[4])
             level[2] = level[0].trace('w', self.stateChanged)
@@ -757,6 +779,115 @@ class EQEditor:
         log("knob " + str(index) + " adjusted, value = " + str(newVal))
         var.set(int(newVal))
         setting[1].configure(fg='red')
+        
+class DragDropListbox(tk.Listbox):
+    """ A Tkinter listbox with drag'n'drop reordering of entries. """
+    def __init__(self, master, callback, **kw):
+        kw['selectmode'] = tk.SINGLE
+        tk.Listbox.__init__(self, master, kw)
+        self.bind('<Button-1>', self.setCurrent)
+        self.bind('<B1-Motion>', self.shiftSelection)
+        self.curIndex = None
+        self.callback = callback
+
+    def setCurrent(self, event):
+        self.curIndex = self.nearest(event.y)
+        self.callback()
+
+    def shiftSelection(self, event):
+        i = self.nearest(event.y)
+        if i < self.curIndex:
+            x = self.get(i)
+            self.delete(i)
+            self.insert(i+1, x)
+            self.curIndex = i
+        elif i > self.curIndex:
+            x = self.get(i)
+            self.delete(i)
+            self.insert(i-1, x)
+            self.curIndex = i
+        self.callback()
+        
+class ChainEditor:
+    def __init__(self, parent, katana, app, title):
+        self.katana = katana
+        self.app = app
+        self.parent = parent
+        self.frame = tk.Toplevel(parent, width=200, height=450)
+        self.title_frame = tk.LabelFrame(self.frame, text=title, padx=10, pady=5)
+        self.title_frame.grid(row=0,column=0)
+        self.list = DragDropListbox(self.title_frame, self.write, height=11)
+        items = ["one", "two", "three"]
+        self.list.insert(0, *items)
+        
+        self.read()
+        self.list.grid(row=0,column=0)
+        #self.list.pack()
+        self.hide()
+        self.lastChain = []
+        
+        close = tk.Button(self.frame, text="Close", command=self.hide)
+        close.grid(row=1, column=0)
+        
+    def hide(self):
+        log("Closing")
+        self.frame.withdraw()
+        
+    def show(self):
+        log("Showing")
+        self.frame.deiconify()
+        centerTK.center(self.parent, self.frame)
+        
+    def read(self):
+        log("reading chain")
+        addr = QUERY_EFFECT_CHAIN
+        items = []#"one", "two", "three", "four", "five"]
+        chain = self.katana.query_sysex_data(addr, len=20)
+        log("done reading " + str(chain))
+        for data in chain[1]:
+            log(str(data), 0)
+            for k in data:
+                if k in EFFECT_CHAIN_LABEL:
+                    print(EFFECT_CHAIN_LABEL[k])
+                    items.append(EFFECT_CHAIN_LABEL[k])
+            
+        #print(self.katana.query_sysex_byte(addr))
+            
+        if self.list.size() > 0:
+            self.list.delete(0, tk.END)
+    
+        self.list.insert(0, *items)
+        
+        self.lastChain = items.copy()
+        
+        
+    def write(self):
+        
+        newChain = []
+        for i in range(len(EFFECT_CHAIN)):
+            newChain.append(self.list.get(i))
+        
+        if newChain == self.lastChain:
+            log("no change", 0)
+            return
+        
+        log("last chain: " + str(self.lastChain), 0)
+        log("new chain: " + str(newChain), 1)
+        self.lastChain = newChain.copy()
+        log("writing chain", 0)
+        data = []
+        for i in range(len(EFFECT_CHAIN_PRE)):
+            data.append(EFFECT_CHAIN_PRE[i])
+            
+        for i in range(len(newChain)):
+            data.append(EFFECT_CHAIN[newChain[i]])
+            
+        for i in range(len(EFFECT_CHAIN_POST)):
+            data.append(EFFECT_CHAIN_POST[i])
+            
+        log("new chain data: " + str(data), 0)
+        self.katana.send_sysex_data(QUERY_EFFECT_CHAIN, tuple(data))
+        log("new chain set", 1)
 
 class EffectEditor:
     def __init__(self, parent, katana, app, title, settings):
@@ -820,7 +951,7 @@ class EffectEditor:
         pin = msg[0]
         level = msg[1]
         tick = msg[2]
-        print("knob " + str(pin) + " moved")
+        log("knob " + str(pin) + " moved")
         if len(self.sliders) > adc_knob_count:
             #if the last knob moves set the knob offset
             if pin == 16 + adc_knob_count - 1:
@@ -833,7 +964,7 @@ class EffectEditor:
                 return        
         
         index = pin - 16 + self.knob_offset
-        print("index = " + str(index))
+        log("index = " + str(index))
         if index >= len(self.settings):
             return
         #map the value to the setting's range
@@ -965,12 +1096,12 @@ class KatanaApp:
 
         for item in layout:
             panel = EffectPanel(self.katana, self, item, TOGGLES[col], COLORS[col], COLOR_ASSIGN[col], EFFECTS[col], LEVELS[item], effect_map[item], HW_BUTTONS[col], self.effect_settings[item], root)
-            panel.title_frame.grid(row=2, column=col)
+            panel.title_frame.grid(row=2, column=col*2, columnspan=2)
             if col == 0:
                 channel = ChannelButton(self.katana, "Panel", col, root)
             else:
                 channel = ChannelButton(self.katana, "Ch." + str(col), col, root)
-            channel.title_frame.grid(row=1, column=col)
+            channel.title_frame.grid(row=1, column=col*2, columnspan=2)
             col = col + 1
             self.effects.append(panel)
             self.channels.append(channel)
@@ -979,13 +1110,17 @@ class KatanaApp:
         self.channel_trace = ChannelButton.channel.trace('w', self.channelStateChanged)
     
         self.mute = ToggleButton(self.katana, self, "Mute", MUTE_HW_BUTTON, root)
-        self.mute.title_frame.grid(row=0, column=4)
+        self.mute.title_frame.grid(row=0, column=4*2, columnspan=2)
         self.mute_trace = self.mute.toggle.trace('w', self.muteStateChanged)
 
         self.ab = ToggleButton(self.katana, self, "A/B", AB_HW_BUTTON, root)
-        self.ab.title_frame.grid(row=0, column=2)
+        self.ab.title_frame.grid(row=0, column=2*2, columnspan=2)
         self.ab_trace = self.ab.toggle.trace('w', self.abStateChanged)
-
+        
+        self.amp_frame = tk.Toplevel(root, width=480, height=320)
+        self.amp_panel = EQEditor(self.katana, self, "Amp Panel", AmpPanel, ChAmpPanel, self.amp_frame)
+        self.amp_frame.withdraw()
+        
         ampShortList = []
         for i in AMP_LOOP_SHORT:
             #log(AMP_MAP[i])
@@ -994,15 +1129,15 @@ class KatanaApp:
             
         self.ampCycle = cycle(ampShortList)
         self.nextAmp = RingSelector(self.katana, "Amp", QUERY_AMP, self.ampCycle, root)
-        self.nextAmp.title_frame.grid(row=0, column=0)
+        self.nextAmp.title_frame.grid(row=0, column=0, columnspan=2)
         
         self.nextEffect = EffectSelector(self.katana, "Next Effect", self.effects, root)
-        self.nextEffect.title_frame.grid(row=0, column=1)
+        self.nextEffect.title_frame.grid(row=0, column=1*2, columnspan=2)
         
         self.eq_type = tk.IntVar(name="eq.type", value=0)
                 
         self.eq = EQToggle(self.katana, self, "Eq", EQ_HW_BUTTON, root)
-        self.eq.title_frame.grid(row=0,column=3)
+        self.eq.title_frame.grid(row=0,column=3*2, columnspan=2)
         self.eq_trace = self.eq.toggle.trace('w', self.eqStateChanged)
         
         self.controls.append(self.nextAmp)
@@ -1012,7 +1147,7 @@ class KatanaApp:
         self.controls.append(self.mute)
         
         self.closeButton = tk.Button(root, text="Close", command=endCommand)
-        self.closeButton.grid(row=3,column=4)
+        self.closeButton.grid(row=3,column=5)
 
         self.restoreButton = tk.Button(root, text="Restore", command=self.restoreFile)
         self.restoreButton.grid(row=3,column=1)
@@ -1025,6 +1160,9 @@ class KatanaApp:
         
         self.editPedalButton = tk.Button(root, text="Pedal 1", command=self.editPedal1)
         self.editPedalButton.grid(row=3,column=3)
+        
+        self.editChainButton = tk.Button(root, text="Chain", command=self.editChain)
+        self.editChainButton.grid(row=3,column=4)
         
         self.selectedChannel = -1
         
@@ -1049,6 +1187,8 @@ class KatanaApp:
 
         self.pedal_1_frame.withdraw()
         
+        self.chain_editor = ChainEditor(root, self.katana, self, 'Effect Chain')
+        
         self.subscribe(range(16), self.hardware_button)
         
         self.subscribe([adc_exp_pedal], self.pedal_change)
@@ -1057,6 +1197,12 @@ class KatanaApp:
     def editPedal1(self):
         log("Edit pedal 1")
         self.pedal_1_editor.show()      
+    
+    def editChain(self):
+        log("Edit Effect Chain")
+        self.chain_editor.read()
+        self.chain_editor.show()
+    
     
     def saveCurrentChannel(self):
         
@@ -1176,6 +1322,13 @@ class KatanaApp:
         data['AMP'][ch] = {}
         data['AMP'][ch]['STATE'] = []
         data['AMP'][ch]['STATE'].append(('type', ampAddr, self.katana.query_sysex_byte(ampAddr), 1))
+        data['AMP'][ch]['STATE'].append(('gain', AmpPanel['Gain'][4], self.katana.query_sysex_byte(AmpPanel['Gain'][4]), 1))
+        data['AMP'][ch]['STATE'].append(('volume', AmpPanel['Volume'][4], self.katana.query_sysex_byte(AmpPanel['Volume'][4]), 1))
+        data['AMP'][ch]['STATE'].append(('bass', AmpPanel['Bass'][4], self.katana.query_sysex_byte(AmpPanel['Bass'][4]), 1))
+        data['AMP'][ch]['STATE'].append(('mid', AmpPanel['Mid'][4], self.katana.query_sysex_byte(AmpPanel['Mid'][4]), 1))
+        data['AMP'][ch]['STATE'].append(('treble', AmpPanel['Treble'][4], self.katana.query_sysex_byte(AmpPanel['Treble'][4]), 1))
+        data['AMP'][ch]['STATE'].append(('presence', AmpPanel['Presence'][4], self.katana.query_sysex_byte(AmpPanel['Presence'][4]), 1))
+        #data['AMP'][ch]['STATE'].append(('bright', AmpPanel['Bright'][4], self.katana.query_sysex_byte(AmpPanel['Bright'][4]), 1))
         
     def restoreFile(self):
         filename = fdialog.askopenfilename(initialdir = "/home/pi",title = "Select file",filetypes = (("json files","*.json"),("all files","*.*")))
@@ -1201,7 +1354,7 @@ class KatanaApp:
         
     
     def restore(self, data, targetCh=-1):
-        log("Restoring data")
+        log("Restoring data", 1)
         
         d = self.katana.query_sysex_data(CURRENT_PRESET_ADDR, CURRENT_PRESET_LEN)
         curr_ch = d[1][0][1]
@@ -1321,6 +1474,17 @@ class KatanaApp:
                     self.effects[btn].toggle.set(1)
                     
         elif btn < 10:
+            if hold:
+                log("Saving preset", 1)
+                ch = btn - 5
+                log("Channel is " + str(ch), 1)
+                chSel = ch 
+                if ch > 0 and self.ab.toggle.get():
+                    chSel = ch + 4
+                log("Saving to preset " + str(chSel), 1)
+                self.katana.save_to_preset(chSel)
+                return
+            log("Changing channel to " + str(btn-5), 1)
             ChannelButton.channel.set(btn-5)
         elif btn == AMP_HW_BUTTON:
             self.sendOutput(AMP_HW_BUTTON, 1)
@@ -1336,7 +1500,12 @@ class KatanaApp:
             else:
                 self.ab.toggle.set(1)
         elif btn == MUTE_HW_BUTTON:
-            if self.mute.toggle.get() == 1:
+            if self.amp_panel.isEditing():
+                self.amp_panel.stopEditing()
+                return
+            if hold:
+                self.amp_panel.edit()
+            elif self.mute.toggle.get() == 1:
                 self.mute.toggle.set(0)
             else:
                 self.mute.toggle.set(1)
@@ -1418,18 +1587,26 @@ class KatanaApp:
             bigMessage("A/B: B", 1.5)
         else:
             bigMessage("A/B: A", 1.5)
-            
+        log("AB set to " + str(abVal), 1)
+ 
         self.readPatchNames()
         if ChannelButton.channel.get() > -1:
+            log("setting channel to -1", 1)
             self.selectedChannel = ChannelButton.channel.get()
             ChannelButton.channel.set(-1)
         else:
+            log("setting channel to " + str(self.selectedChannel))
             ChannelButton.channel.set(self.selectedChannel)
+              
+#         for i in range(0,9):
+#             log("selecting channel " + str(i), 1)
+#             self.katana.select_channel(i)
+#             time.sleep(3)
         
     def channelStateChanged(self, *args):
-        log("Channel state changed to " + str(ChannelButton.channel.get()))
+        log("Channel state changed to " + str(ChannelButton.channel.get()),1)
         ch = ChannelButton.channel.get()
-        log("Raw channel value =  " + str(ch))
+        log("Raw channel value =  " + str(ch),1)
         chSel = -1
         if ch >= 0:
             chSel = ch
@@ -1437,28 +1614,32 @@ class KatanaApp:
         for i in range(0,5):
             self.sendOutput(i+5,0)
         if chSel >= 0:
-            log(str(chSel+5) + " set to 1")
+            log("output " + str(chSel+5) + " set to 1", 1)
             self.sendOutput(chSel+5, 1)
             
-        log("chSel value = " + str(chSel))
+        log("chSel value = " + str(chSel), 1)
         if ch == 0:
             ch = 4 #panel 0x04
-            #log("Selecting channel 4")
+            log("Selecting channel 4",1)
             bigMessage("Panel", 2.5)
             self.katana.select_channel(ch)
             
         elif ch > 0:
             if self.ab.toggle.get() == 0:
                 ch = ch - 1
-                bigMessage("Ch. " + str(ch+1),2.5)
+                log("ab 0 katana.select " + str(ch), 1)
                 self.katana.select_channel(ch)
+                bigMessage("Ch. " + str(ch+1),2.5)
                 
             else:
                 ch = ch + 4
-                bigMessage("Ch. " + str(ch),2.5)
+                log("ab 1 katana.select " + str(ch), 1)
                 self.katana.select_channel(ch)
+                bigMessage("Ch. " + str(ch),2.5)
+        else:
+            log("channel -1", 1)
                 
-                
+        #time.sleep(1.2)
         self.readPatchNames()
         for effect in self.effects:
             effect.read()

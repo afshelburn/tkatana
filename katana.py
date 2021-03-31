@@ -265,7 +265,15 @@ class Katana:
         return d[1][0][1]
     
     def select_channel(self, ch):
-        self.send_pc(ch)
+        if ch < 0 or ch > 8:
+            print("Channel " + str(ch) + " out of range")
+            return
+        #something weird happening with pc change so uing bts mode instead
+        print("Sending pc change: " + str(ch))
+        self.bts_edit(1)
+        self.send_sysex_data(LOAD_PRESET, (0,PC_TO_PRESET[ch]))
+        self.bts_edit(0)
+        #self.send_pc(ch)
 
     def set_boost(self, amount):
         self.send_sysex_data(BOOST_LEVEL,(amount,))
@@ -441,6 +449,7 @@ class Katana:
     # Send program change
     def send_pc( self, program ):
         self.pc.program = program
+        print("program " + str(self.pc))
         self.outport.send( self.pc )
 
     # Send control change
@@ -522,6 +531,21 @@ class Katana:
         #res = ''.join(map(chr, name)) 
         #print(res)
         
+    def bts_edit(self, state):
+        self.send_sysex_data( BTS_MODE, (state,)  )
+        time.sleep(0.05)
+        
+    def save_to_preset(self, i):
+        print("saving to preset " + str(i))
+        self.bts_edit(1)
+        self.send_sysex_data( SAVE_PRESET, (0,i) )
+        self.bts_edit(0)
+        
+    def clear_preset(self, i):
+        print("clearing preset " + str(i))
+        self.bts_edit(1)
+        self.send_sysex_data( CLEAR_PRESET, (0,i) )
+        self.bts_edit(0)        
     
 
 if __name__ == '__main__':
