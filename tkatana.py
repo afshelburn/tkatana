@@ -18,6 +18,7 @@ import threading
 import random
 import queue
 import math
+import json
 
 root = tk.Tk()
 
@@ -1072,6 +1073,8 @@ class PedalEditor:
         
     def set_pedal_map(self,*args):
         log("Setting pedal map to " + self.pedal_option.get())
+
+        
         
 class KatanaApp:
     def __init__ (self, master, queue, hw_board, endCommand):
