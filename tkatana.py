@@ -19,6 +19,7 @@ import random
 import queue
 import math
 import json
+import librarian
 
 root = tk.Tk()
 
@@ -1150,7 +1151,7 @@ class KatanaApp:
         self.controls.append(self.mute)
         
         self.closeButton = tk.Button(root, text="Close", command=endCommand)
-        self.closeButton.grid(row=3,column=5)
+        self.closeButton.grid(row=3,column=6)
 
         self.restoreButton = tk.Button(root, text="Restore", command=self.restoreFile)
         self.restoreButton.grid(row=3,column=1)
@@ -1210,11 +1211,11 @@ class KatanaApp:
         self.chain_editor.show()
         
     def patchLoader(self):
-        f = tk.topLevel(root)
-        l = Librarian(f)
+        f = tk.Toplevel(root)
+        l = librarian.Librarian(f)
         centerTK.center(root, f)
         l.setKatana(self.katana)
-        loadDir('/home/anthony/tsl_files')
+        l.loadDir('/home/pi/tsl_files')
     
     def saveCurrentChannel(self):
         

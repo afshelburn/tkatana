@@ -68,13 +68,21 @@ class Librarian(tk.Frame):
         self.list.insert(0, *self.patches.keys())
         
     def loadTSL(self, file):
-        with open(file, 'r') as handle:
-            self.data = json.load(handle)
-
-        if self.data['device'] == 'KATANA MkII':
-            print(self.data['device'])
+        fileData = None
+        try:
+            with open(file, 'r') as handle:
+                fileData = json.load(handle)
+        except ValueError:  # includes simplejson.decoder.JSONDecodeError
+            print('Decoding JSON has failed for ' + file)
+        
+        if fileData is None:
+            print("No data for " + file)
+            return
+        
+        if fileData['device'] == 'KATANA MkII':
+            print(fileData['device'])
             
-            for preset in self.data['data'][0]:
+            for preset in fileData['data'][0]:
                 name = preset['paramSet']['UserPatch%PatchName']
                 #name[0] = '4C'
                 test = int(name[0], 16)
@@ -96,17 +104,15 @@ class Librarian(tk.Frame):
                     for i in range(sz):
                         self.patches[name].append((params[i], int(patch[i],16)))    
                     
-        elif 'GT' in self.data['device']:
-            print(self.data['device'])
+        elif 'GT' in fileData['device']:
+            print(fileData['device'])
             #print(self.data['patchList'][0]['params'])
-            print("Reading patch " + self.data['patchList'][0]['params']['patchname'])
-            patchName = self.data['patchList'][0]['params']['patchname']
+            print("Reading patch " + fileData['patchList'][0]['params']['patchname'])
+            patchName = fileData['patchList'][0]['params']['patchname']
             self.patches[patchName] = []
-            for key in self.data['patchList'][0]['params']:
-                if key not in tsl.tsl_params:
-                    print("not found " + key)
-                else:
-                    self.patches[patchName].append((tsl.tsl_params[key], self.data['patchList'][0]['params']))
+            for key in fileData['patchList'][0]['params']:
+                if key in tsl.tsl_params:
+                    self.patches[patchName].append((tsl.tsl_params[key], fileData['patchList'][0]['params']))
                 #print(key + " = " + str(self.data['patchList'][0]['params'][key]))
     
     def loadPatch(self, katana, patchName, ch=-1):
