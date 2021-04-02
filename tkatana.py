@@ -1167,6 +1167,9 @@ class KatanaApp:
         self.editChainButton = tk.Button(root, text="Chain", command=self.editChain)
         self.editChainButton.grid(row=3,column=4)
         
+        self.editChainButton = tk.Button(root, text="TSL Loader", command=self.patchLoader)
+        self.editChainButton.grid(row=3,column=5)
+        
         self.selectedChannel = -1
         
         self.hwButtonPressTime = {}
@@ -1205,7 +1208,13 @@ class KatanaApp:
         log("Edit Effect Chain")
         self.chain_editor.read()
         self.chain_editor.show()
-    
+        
+    def patchLoader(self):
+        f = tk.topLevel(root)
+        l = Librarian(f)
+        centerTK.center(root, f)
+        l.setKatana(self.katana)
+        loadDir('/home/anthony/tsl_files')
     
     def saveCurrentChannel(self):
         

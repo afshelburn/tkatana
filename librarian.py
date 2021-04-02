@@ -2,12 +2,18 @@ import json
 import tsl
 import os
 import katana
+import tkinter as tk
 
-class Librarian:
-    def __init__(self, **kwargs):#, tkRoot, app, katana):
-        #self.tkRoot = tkRoot
-        #self.app = app
-        #self.katana = katana
+from tkinter import *
+import tkinter.font as tkFont
+
+import tkinter.filedialog as fdialog
+import tkinter.messagebox as messagebox
+
+class Librarian(tk.Frame):
+    def __init__(self, master=None, **kwargs):#, tkRoot, app, katana):
+        tk.Frame.__init__(self, master)
+
         self.data = None
         self.patches = {}
         self.mk2_params = {}
@@ -20,12 +26,46 @@ class Librarian:
         self.mk2_params[self.sections[5]] = tsl.fx1_tsl
         self.mk2_params[self.sections[6]] = tsl.fx2_tsl
         
-        #tsl_dir = kwargs['dir']
+        title = "Patch Loader"
+        
+        self.grid()
+        
+        self.scrollbar = tk.Scrollbar(self, orient=VERTICAL)
+        self.scrollbar.grid(row=0, column=2, sticky=tk.NW+tk.S)
+        
+        self.list = tk.Listbox(self, yscrollcommand=self.scrollbar.set, height=14)
+        self.list.grid(row=0, column=0, columnspan=2, sticky=tk.N+tk.S+tk.E+tk.W)
+        
+        items = ["one", "two", "three"]
+        self.list.insert(0, *items)
+        
+        self.scrollbar['command'] = self.list.yview
+        
+        close = tk.Button(self, text="Close", command=master.destroy)
+        close.grid(row=1, column=1)
+
+        load = tk.Button(self, text="Load", command=self.loadSelected)
+        load.grid(row=1, column=0)
+
+        self.katana = None
+        
+    def setKatana(self, katana):
+        self.katana = katana
+        
+    def loadSelected(self):
+        curr = self.list.get(self.list.curselection())
+        print("Loading " + curr)
+        self.loadPatch(self.katana, curr)
         
     def loadDir(self, tsl_dir):
         for filename in os.listdir(tsl_dir):
             if filename.endswith(".tsl"):
                 self.loadTSL(os.path.join(tsl_dir, filename))
+                
+        if self.list.size() > 0:
+            self.list.delete(0, tk.END)
+    
+        self.list.insert(0, *self.patches.keys())
         
     def loadTSL(self, file):
         with open(file, 'r') as handle:
@@ -77,12 +117,15 @@ class Librarian:
         chAddr = {-1:(0x60,0x00),0:(0x10,0x00),1:(0x10,0x01),2:(0x10,0x02),3:(0x10,0x03),4:(0x10,0x04),5:(0x10,0x05),6:(0x10,0x06),7:(0x10,0x07),8:(0x10,0x08)}
         print("Channel addr = " + str(chAddr[ch]))
         for param in params:
-            print(str(param))
+            #print(str(param))
             addr = (chAddr[ch][0], chAddr[ch][1], param[0][1][0], param[0][1][1])
-            offs = param[0][0]
+            offs = 0 #param[0][0]
             value = param[1] + offs
+            if value > 127:
+                print("value = " + str(value) + " at " + str(param[0][1][0]) + ", " + str(param[0][1][1]))
+                continue
             if katana is not None:
-                katana.send_sysex_data(addr, value)
+                katana.send_sysex_data(addr, (value,))
             else:
                 print(str(addr) + " = " + str(value))
         if katana is not None and ch > -1:
@@ -90,10 +133,22 @@ class Librarian:
         else:
             print("done loading patch " + patchName + " into " + str(ch))
         
-l = Librarian()
-#l.loadTSL('/home/anthony/git_repos/tkatana/default_mk2.tsl')
-#l.loadTSL('/home/anthony/git_repos/tkatana/default.tsl')
-l.loadDir('/home/anthony/tsl_files')
-print(str(l.patches.keys()))
+if __name__ == '__main__':
+    root = tk.Tk()
+    
+    test = tk.Toplevel(root)
+    
+    katana = None #katana.Katana('KATANA MIDI 1',  0,  False)
+    l = Librarian(master=test)
+    #l.loadTSL('/home/anthony/git_repos/tkatana/default_mk2.tsl')
+    #l.loadTSL('/home/anthony/git_repos/tkatana/default.tsl')
+    l.loadDir('/home/anthony/tsl_files')
+    print(str(l.patches.keys()))
+    
 
-katana = katana.Katana('KATANA MIDI 1',  0,  False)
+    
+    
+
+    
+    
+    root.mainloop()
