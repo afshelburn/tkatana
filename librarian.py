@@ -10,10 +10,14 @@ import tkinter.font as tkFont
 import tkinter.filedialog as fdialog
 import tkinter.messagebox as messagebox
 
+import getpass as gp
+
 class Librarian(tk.Frame):
     def __init__(self, master=None, **kwargs):#, tkRoot, app, katana):
         tk.Frame.__init__(self, master)
 
+        self.lastDir = '/home/' + gp.getuser()
+        
         self.data = None
         self.patches = {}
         self.mk2_params = {}
@@ -42,10 +46,19 @@ class Librarian(tk.Frame):
         self.scrollbar['command'] = self.list.yview
         
         close = tk.Button(self, text="Close", command=master.destroy)
-        close.grid(row=1, column=1)
+        close.grid(row=3, column=0, columnspan=2)
 
         load = tk.Button(self, text="Load", command=self.loadSelected)
-        load.grid(row=1, column=0)
+        load.grid(row=1, column=0, columnspan=1)
+        
+        clear = tk.Button(self, text="Clear", command=self.reset)
+        clear.grid(row=1, column=1, columnspan=1)
+        
+        browse = tk.Button(self, text="Browse Files", command=self.browseFiles)
+        browse.grid(row=2, column=0)
+        
+        browseDir = tk.Button(self, text="Browse Folder", command=self.browseDir)
+        browseDir.grid(row=2, column=1)
 
         self.katana = None
         
@@ -57,16 +70,37 @@ class Librarian(tk.Frame):
         print("Loading " + curr)
         self.loadPatch(self.katana, curr)
         
+    def reset(self):
+        self.patches.clear()
+        self.refreshList()
+        
     def loadDir(self, tsl_dir):
         for filename in os.listdir(tsl_dir):
             if filename.endswith(".tsl"):
                 self.loadTSL(os.path.join(tsl_dir, filename))
                 
+        self.refreshList()
+        
+    def refreshList(self):
         if self.list.size() > 0:
             self.list.delete(0, tk.END)
-    
         self.list.insert(0, *self.patches.keys())
         
+    def browseFiles(self):
+        filenames = tk.filedialog.askopenfilenames(initialdir = self.lastDir, title = "Select a File", filetypes = (("TSL files", "*.tsl"), ("all files", "*.*")))
+        for filename in filenames:
+            print(filename)
+            self.loadTSL(filename)
+            self.lastDir = os.path.dirname(filename)
+        self.refreshList()
+        
+    def browseDir(self):
+        filename = tk.filedialog.askdirectory(initialdir = self.lastDir, title = "Select a Folder")
+        print(filename)
+        self.loadDir(filename)
+        self.lastDir = filename
+        #self.refreshList()
+    
     def loadTSL(self, file):
         fileData = None
         try:
@@ -113,7 +147,6 @@ class Librarian(tk.Frame):
             for key in fileData['patchList'][0]['params']:
                 if key in tsl.tsl_params:
                     self.patches[patchName].append((tsl.tsl_params[key], fileData['patchList'][0]['params']))
-                #print(key + " = " + str(self.data['patchList'][0]['params'][key]))
     
     def loadPatch(self, katana, patchName, ch=-1):
         params = self.patches[patchName]
