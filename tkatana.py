@@ -1215,7 +1215,7 @@ class KatanaApp:
         l = librarian.Librarian(f)
         centerTK.center(root, f)
         l.setKatana(self.katana)
-        l.loadDir('/home/pi/tsl_files')
+        #l.loadDir('/home/pi/tsl_files')
     
     def saveCurrentChannel(self):
         
